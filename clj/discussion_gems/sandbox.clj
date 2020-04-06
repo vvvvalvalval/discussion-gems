@@ -1,5 +1,7 @@
 (ns discussion-gems.sandbox
   (:require [sparkling.core :as spark]
+            [manifold.deferred :as mfd]
+            [sparkling.conf :as conf]
             [discussion-gems.utils.spark :as uspark])
   (:import (org.apache.hadoop.io.compress ZStandardCodec)))
 
