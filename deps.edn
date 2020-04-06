@@ -1,0 +1,35 @@
+{:source-paths ["clj"]
+
+ :deps
+ {org.clojure/clojure {:mvn/version "1.10.0"}
+
+  org.clojure/core.async {:mvn/version "0.3.442"}
+  manifold {:mvn/version "0.1.8"}
+
+  org.apache.commons/commons-compress {:mvn/version "1.18"}
+  org.clojure/data.fressian {:mvn/version "0.2.1"}
+  metosin/jsonista {:mvn/version "0.2.5"}
+  io.airlift/aircompressor {:mvn/version "0.16"}
+
+  org.clojure/data.zip {:mvn/version "0.1.2"}
+  vvvvalvalval/supdate {:mvn/version "0.2.1"}
+  com.rpl/specter {:mvn/version "1.1.2"}
+
+  org.apache.spark/spark-core_2.10 {:mvn/version "2.1.0"}
+  org.apache.spark/spark-sql_2.10 {:mvn/version "2.1.0"}
+  gorillalabs/sparkling {:mvn/version "2.1.3"}
+  org.elasticsearch/elasticsearch-spark-20_2.10 {:mvn/version "7.0.1"}
+
+  clj-http {:mvn/version "3.9.1"}}
+
+
+ :aliases
+ {:dev ;; Code directories and dependencies useful during development.
+  {:extra-paths []
+   :extra-deps {;; debugging tools
+                vvvvalvalval/scope-capture {:mvn/version "0.3.2"}
+                vvvvalvalval/scope-capture-nrepl {:mvn/version "0.2.0"}}}
+
+  :nREPL ;; Enables you to run a remote Clojure REPL via nREPL.
+  {:extra-deps
+   {nrepl/nrepl {:mvn/version "0.6.0"}}}}}
