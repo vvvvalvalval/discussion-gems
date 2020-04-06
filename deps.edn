@@ -1,4 +1,4 @@
-{:source-paths ["clj"]
+{:paths ["./clj"]
 
  :deps
  {org.clojure/clojure {:mvn/version "1.10.0"}
@@ -8,15 +8,17 @@
 
   org.apache.commons/commons-compress {:mvn/version "1.18"}
   org.clojure/data.fressian {:mvn/version "0.2.1"}
-  metosin/jsonista {:mvn/version "0.2.5"}
-  io.airlift/aircompressor {:mvn/version "0.16"}
+  ;metosin/jsonista {:mvn/version "0.2.5"}
+  ;io.airlift/aircompressor {:mvn/version "0.16"}
 
   org.clojure/data.zip {:mvn/version "0.1.2"}
   vvvvalvalval/supdate {:mvn/version "0.2.1"}
   com.rpl/specter {:mvn/version "1.1.2"}
 
-  org.apache.spark/spark-core_2.10 {:mvn/version "2.1.0"}
-  org.apache.spark/spark-sql_2.10 {:mvn/version "2.1.0"}
+  org.apache.hadoop/hadoop-client {:mvn/version "2.9.0"}
+  com.fasterxml.jackson.core/jackson-databind {:mvn/version "2.6.5"} ;; Because Spark 2.11 wants that
+  org.apache.spark/spark-core_2.11 {:mvn/version "2.4.5"}
+  org.apache.spark/spark-sql_2.11 {:mvn/version "2.4.5"}
   gorillalabs/sparkling {:mvn/version "2.1.3"}
   org.elasticsearch/elasticsearch-spark-20_2.10 {:mvn/version "7.0.1"}
 
@@ -25,8 +27,7 @@
 
  :aliases
  {:dev ;; Code directories and dependencies useful during development.
-  {:extra-paths []
-   :extra-deps {;; debugging tools
+  {:extra-deps {;; debugging tools
                 vvvvalvalval/scope-capture {:mvn/version "0.3.2"}
                 vvvvalvalval/scope-capture-nrepl {:mvn/version "0.2.0"}}}
 
