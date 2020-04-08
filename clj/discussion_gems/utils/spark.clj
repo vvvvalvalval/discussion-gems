@@ -15,6 +15,18 @@
            (org.apache.hadoop.io.compress DefaultCodec)))
 
 
+
+(defn broadcast-var
+  "Wrapper for creating a Spark Broadcast Variable."
+  [^JavaSparkContext sc, v]
+  (.broadcast sc v))
+
+(defn broadcast-value
+  "Wrapper for reading a Spark Broadcast Variable."
+  [^Broadcast bv]
+  (.value bv))
+
+
 (defn run-local
   "Utility for concisely running Spark jobs locally.
   Given a callback function f accepting a Spark Context,
@@ -55,3 +67,48 @@
       (fn [k+v]
         (let [^Text v (s-de/value k+v)]
           (.toString v))))))
+
+
+
+
+
+(defn diversified-sample
+  "See https://vvvvalvalval.github.io/posts/2019-09-13-diversified-sampling-mining-large-datasets-for-special-cases.html"
+  ^JavaRDD
+  [sc K draw-random get-features, ^JavaRDD rdd]
+  (let [
+        counting-feature ::counting-feature
+        ftr-counts (->> rdd
+                     (spark/flat-map
+                       (fn [e]
+                         (into [counting-feature]
+                           (get-features e))))
+                     (spark/map-to-pair
+                       (fn [k]
+                         (spark/tuple k 1)))
+                     (spark/reduce-by-key +)
+                     (spark/collect-map))
+        n-elems (get ftr-counts counting-feature)
+        ftr-counts--BV (broadcast-var sc
+                         (dissoc ftr-counts counting-feature))]
+    (->> rdd
+      (spark/filter
+        (fn [e]
+          (let [present-ftrs (set (get-features e))
+                ftr-counts (broadcast-value ftr-counts--BV)
+                prob-threshold
+                (Math/min
+                  1.0
+                  (double
+                    (reduce-kv
+                      (fn [pt ftr M]
+                        (Math/max
+                          (double pt)
+                          (double
+                            (/ K
+                              (if (contains? present-ftrs ftr)
+                                M
+                                (- n-elems M))))))
+                      0.0
+                      ftr-counts)))]
+            (> prob-threshold (draw-random e))))))))

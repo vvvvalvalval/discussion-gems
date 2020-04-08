@@ -104,13 +104,7 @@
 
 
 
-  ;;;; Merging all jsonl.gz into one jsonl file
-  ;ubuntu@ip-172-31-40-156:~/discussion-gems$ (trap "" HUP; cat ../datasets/reddit-france/comments/*.jsonl.gz | gunzip) >> ../datasets/reddit-france/comments/RC.jsonl  < /dev/null 2>>../copy-err.txt &
-  ;; Took less than a minute
 
-  ;ubuntu@ip-172-31-40-156:~/discussion-gems$ wc -l ../datasets/reddit-france/comments/RC.jsonl
-  ;6022410
-  ;; So that seems complete
 
   *e)
 
@@ -143,50 +137,48 @@
 
 
 (comment ;; Exploring downloaded comments from r/france
-  ;; How many comments? Can we JSON-decode them all?
-  (time
-    @(uspark/run-local
-       (fn [sc]
-         (->>
-           (spark/text-file sc "../RC-zst.jsonl")
-           (spark/map (fn [^String l] (json/read-value l json-mpr)))
-           (spark/count)))))
-  => 1725327
 
+  ;;;; Merging all jsonl.gz into one (temporary) jsonl file
+  ;ubuntu@ip-172-31-40-156:~/discussion-gems$ (trap "" HUP; cat ../datasets/reddit-france/comments/*.jsonl.gz | gunzip) >> ../datasets/reddit-france/comments/RC.jsonl  < /dev/null 2>>../copy-err.txt &
+  ;; Took less than a minute
+
+  ;ubuntu@ip-172-31-40-156:~/discussion-gems$ wc -l ../datasets/reddit-france/comments/RC.jsonl
+  ;6022410
+  ;; So that seems complete
 
   ;; Let's save this to a Hadoop SequenceFile
   (def done
     (uspark/run-local
       (fn [sc]
         (->>
-          (spark/text-file sc "../RC-zst.jsonl")
+          (spark/text-file sc "../datasets/reddit-france/comments/RC.jsonl")
           (spark/map-to-pair
             (fn [l] (spark/tuple "" l)))
-          (uspark/save-to-hadoop-text+text-seqfile "../RC-zst.seqfile")))))
+          (uspark/save-to-hadoop-text+text-seqfile "../datasets/reddit-france/comments/RC.seqfile")))))
 
 
-  ;; How long to process the whole SequenceFile?
+
+  ;; How many comments? Can we JSON-decode them all? How long does it take ?
   (time
     @(uspark/run-local
        (fn [sc]
          (->>
-           (uspark/from-hadoop-text-sequence-file sc "../RC-zst.seqfile")
+           (uspark/from-hadoop-text-sequence-file sc "../datasets/reddit-france/comments/RC.seqfile")
            (spark/map (fn [^String l] (json/read-value l json-mpr)))
            (spark/count)))))
-  ;"Elapsed time: 19998.331 msecs"
-  => 1725327
-  (/ 19998.331 1725327) ; => 11.6 µs/doc
+  ; "Elapsed time: 64287.270686 msecs"
+  => 6022410
+  (/ 64287.270686 6022410) => 0.010674675202452175 ;; 10µs/comment
 
 
-  (require 'sc.api)
 
   ;; What does comments metadata look like ?
   (def sample-comments
     @(uspark/run-local
        (fn [sc]
          (->>
-           (uspark/from-hadoop-text-sequence-file sc "../RC-zst.seqfile")
-           (spark/sample false (/ 1e2 1725327) 824402)
+           (uspark/from-hadoop-text-sequence-file sc "../datasets/reddit-france/comments/RC.seqfile")
+           (spark/sample false (/ 1e2 6022410) 824402)
            (spark/map
              (fn [^String l]
                (json/read-value l json-mpr)))
@@ -194,64 +186,77 @@
            (mapv #(into (sorted-map) %))
            shuffle vec))))
 
+  ;; TODO diversified sampling of comments (Val, 08 Apr 2020)
+
+  *e)
+
+
+(defn comment-features
+  [c]
+  (into #{}
+    cat
+    [(->> c
+       (map (fn [[k v]]
+              (str "KEY " (name k) " " (if v "T" "F")))))
+     [(str "body->length-h1b=" (-> c :body count Long/highestOneBit))
+      (str "score->h1b="
+        (if (neg? (:score c)) "-" "+")
+        (-> c :score long Math/abs
+          Long/highestOneBit))]
+     (when-some [cutc (:created_utc c)]
+       (let [d (-> cutc
+                 (cond-> (string? cutc) (Long/parseLong 10))
+                 (* 1000) java.util.Date.)]
+         [(str "created_utc->Y-M="
+            (-> d .getYear (+ 1900))
+            "-"
+            (-> d .getMonth (+ 1)))]))
+     (->> c :body set
+       (map (fn [chr]
+              (str "body HAS_CHAR " chr))))]))
+
+(comment
+  (->> sample-comments
+    (mapcat comment-features)
+    frequencies
+    (into (sorted-map)))
+
   *e)
 
 
 (comment  ;; Exploring downloaded submissions from r/france
-  ;; How many submissions? Can we JSON-decode them all?
-  (time
-    @(uspark/run-local
-       (fn [sc]
-         (->>
-           (spark/text-file sc "../RS-zst.jsonl")
-           (spark/map (fn [^String l] (json/read-value l json-mpr)))
-           (spark/count)))))
-  => 118095
 
+  ;;;; Merging all jsonl.gz into one (temporary) jsonl file
+  ;ubuntu@ip-172-31-40-156:~/discussion-gems$ (trap "" HUP; cat ../datasets/reddit-france/submissions/*.jsonl.gz | gunzip) >> ../datasets/reddit-france/submissions/RS.jsonl  < /dev/null 2>>../copy-err.txt &
+  ;; Took a few seconds
+
+  ;ubuntu@ip-172-31-40-156:~/discussion-gems$ wc -l ../datasets/reddit-france/submissions/RS.jsonl
+  ;255581
 
   ;; Let's save this to a Hadoop SequenceFile
   (def done
     (uspark/run-local
       (fn [sc]
         (->>
-          (spark/text-file sc "../RS-zst.jsonl")
+          (spark/text-file sc "../datasets/reddit-france/submissions/RS.jsonl")
           (spark/map-to-pair
             (fn [l] (spark/tuple "" l)))
-          (uspark/save-to-hadoop-text+text-seqfile "../RS-zst.seqfile")))))
+          (uspark/save-to-hadoop-text+text-seqfile "../datasets/reddit-france/submissions/RS.seqfile")))))
 
 
-  ;; How long to process the whole SequenceFile?
+
+  ;; How many submissions? Can we JSON-decode them all?
   (time
     @(uspark/run-local
        (fn [sc]
          (->>
-           (uspark/from-hadoop-text-sequence-file sc "../RS-zst.seqfile")
+           (uspark/from-hadoop-text-sequence-file sc "../datasets/reddit-france/submissions/RS.seqfile")
            (spark/map (fn [^String l] (json/read-value l json-mpr)))
            (spark/count)))))
-  ;"Elapsed time: 2854.046 msecs"
-  => 118095
-  (/ 2854.046 118095) ; => 24.2 µs/doc
+  ;"Elapsed time: 6518.625515 msecs"
+  => 255581
+  (/ 6518.625515 255581) => 0.025505125635317177 ;; 25µs/submission
 
-
-  ;; What does comments metadata look like ?
-  (def sample-submissions
-    @(uspark/run-local
-            (fn [sc]
-              (->>
-                (uspark/from-hadoop-text-sequence-file sc "../RS-zst.seqfile")
-                (spark/sample false (/ 1e2 118095) 450855)
-                (spark/map
-                  (fn [^String l]
-                    (json/read-value l json-mpr)))
-                (spark/collect)
-                (mapv #(into (sorted-map) %))
-                shuffle vec))))
-
-  ;;;; Merging all jsonl.gz into one jsonl file
-  ;ubuntu@ip-172-31-40-156:~/discussion-gems$ (trap "" HUP; cat ../datasets/reddit-france/submissions/*.jsonl.gz | gunzip) >> ../datasets/reddit-france/submissions/RS.jsonl  < /dev/null 2>>../copy-err.txt &
-  ;; Took a few seconds
-
-  ;ubuntu@ip-172-31-40-156:~/discussion-gems$ wc -l ../datasets/reddit-france/submissions/RS.jsonl
-  ;255581
+  ;; TODO diversified sampling of submissions (Val, 08 Apr 2020)
 
   *e)

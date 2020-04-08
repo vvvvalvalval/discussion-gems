@@ -1,5 +1,7 @@
 (ns discussion-gems.utils.misc
-  (:import (java.util Properties)))
+  (:require [buddy.core.codecs]
+            [buddy.core.hash])
+  (:import (java.util Properties Arrays)))
 
 (defn group-and-map-by
   [kf vf coll]
@@ -26,3 +28,18 @@
       props)
     (Properties.)
     m))
+
+
+(defn draw-random-from-string
+  "Pseudo-randomly draws a number in uniformly [0;1) from a String input, typically an id."
+  [^String id-str]
+  (double
+    (/
+      (-'
+        Long/MAX_VALUE
+        (-> id-str
+          buddy.core.hash/md5
+          bytes
+          (Arrays/copyOf Long/BYTES)
+          buddy.core.codecs/bytes->long))
+      (-' Long/MAX_VALUE Long/MIN_VALUE))))
