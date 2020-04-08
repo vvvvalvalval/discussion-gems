@@ -8,7 +8,11 @@ Launched an EC2 instance in `us-east-1` (so Virginia, should be close enough to 
 
 ```
 sudo apt-get update
-sudo apt-get -y install tree curl git-core openjdk-8-jdk maven rlwrap
+sudo apt-get -y install tree jq curl git-core openjdk-8-jdk maven rlwrap
+sudo apt-get -y install python3-venv python3-pip
+
+
+sudo update-alternatives --install /usr/bin/java java /usr/lib/jvm/java-8-openjdk-amd64/bin/java 1000
 curl -O https://download.clojure.org/install/linux-install-1.10.1.536.sh
 chmod +x linux-install-1.10.1.536.sh
 sudo ./linux-install-1.10.1.536.sh
@@ -107,3 +111,13 @@ KiB Swap:        0 total,        0 free,        0 used.  3320564 avail Mem
   939 root      20   0  170824  10324   2560 S   0.0  0.3   0:00.08 networkd-dispat
 19081 root      20   0  107984   6984   5976 S   0.0  0.2   0:00.00 sshd
 ```
+
+
+
+
+## Dataset construction
+
+```
+ubuntu@ip-172-31-40 cat raw-data/pushshift/reddit/comments/RC_2019-08.zst | zstd -cdq | grep '"france"' | jq -c 'select (.subreddit == "france")' | gzip -c >> datasets/reddit-france/comments/RC_2019-08.jsonl.gz
+```
+

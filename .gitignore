@@ -1,1 +1,3 @@
 .cpcache
+models/*
+!models/.gitkeep

@@ -8,7 +8,7 @@
 
   org.apache.commons/commons-compress {:mvn/version "1.18"}
   org.clojure/data.fressian {:mvn/version "0.2.1"}
-  ;metosin/jsonista {:mvn/version "0.2.5"}
+  metosin/jsonista {:mvn/version "0.2.5"}
   ;io.airlift/aircompressor {:mvn/version "0.16"}
 
   org.clojure/data.zip {:mvn/version "0.1.2"}
@@ -21,6 +21,9 @@
   org.apache.spark/spark-sql_2.10 {:mvn/version "2.1.0"}
   gorillalabs/sparkling {:mvn/version "2.1.3"}
   org.elasticsearch/elasticsearch-spark-20_2.10 {:mvn/version "7.0.1"}
+
+  edu.stanford.nlp/stanford-corenlp {:mvn/version "3.9.2"}
+  edu.stanford.nlp/stanford-corenlp-models-french {:local/root "./models/stanford-french-corenlp-2018-10-05-models.jar"}
 
   clj-http {:mvn/version "3.9.1"}}
 
