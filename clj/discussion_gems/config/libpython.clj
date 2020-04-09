@@ -3,7 +3,7 @@
 
 
 (py/initialize!
-  :python-executable "\"/home/ubuntu/miniconda3/envs/discussion_gems_condaenv/bin/python\""
+  :python-executable "/home/ubuntu/miniconda3/envs/discussion_gems_condaenv/bin/python"
   :library-path "/home/ubuntu/miniconda3/envs/discussion_gems_condaenv/lib/libpython3.7m.so")
 
 (comment

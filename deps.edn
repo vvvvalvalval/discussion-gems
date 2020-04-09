@@ -11,6 +11,9 @@
   metosin/jsonista {:mvn/version "0.2.5"}
   ;io.airlift/aircompressor {:mvn/version "0.16"}
 
+  crouton {:mvn/version "0.1.2"} ;; HTML parsing library for Clojure - https://github.com/weavejester/crouton
+  markdown-clj {:mvn/version "1.10.2"} ;; Markdown parser in Clojure - https://github.com/yogthos/markdown-clj
+
   org.clojure/data.zip {:mvn/version "0.1.2"}
   vvvvalvalval/supdate {:mvn/version "0.2.1"}
   com.rpl/specter {:mvn/version "1.1.2"}
