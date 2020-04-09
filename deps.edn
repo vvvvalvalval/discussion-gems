@@ -27,6 +27,8 @@
   edu.stanford.nlp/stanford-corenlp {:mvn/version "3.9.2"}
   edu.stanford.nlp/stanford-corenlp-models-french {:local/root "./models/stanford-french-corenlp-2018-10-05-models.jar"} ;; NOTE obtained by wget https://nlp.stanford.edu/software/stanford-french-corenlp-2018-10-05-models.jar
 
+  clj-python/libpython-clj {:mvn/version "1.38"}
+
   clj-http {:mvn/version "3.9.1"}}
 
 

@@ -18,7 +18,23 @@ chmod +x linux-install-1.10.1.536.sh
 sudo ./linux-install-1.10.1.536.sh
 ```
 
+### Installing Python deps
 
+```
+ubuntu@ip-172-31-28-231:~$ wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+
+ubuntu@ip-172-31-28-231:~$ sha256sum Miniconda3-latest-Linux-x86_64.sh
+957d2f0f0701c3d1335e3b39f235d197837ad69a944fa6f5d8ad2c686b69df3b  Miniconda3-latest-Linux-x86_64.sh
+
+ubuntu@ip-172-31-28-231:~$ conda create -n discussion_gems_condaenv python=3.7
+
+ubuntu@ip-172-31-28-231:~$ conda activate discussion_gems_condaenv
+```
+
+
+```
+ubuntu@ip-172-31-28-231:~$ pip install -U sentence-transformers
+```
 
 ### Downloading PushShift data
 

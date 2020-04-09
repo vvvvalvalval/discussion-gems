@@ -2,3 +2,4 @@
 models/*
 !models/.gitkeep
 .nrepl-port
+discussion_gems_py/__pycache__
