@@ -197,29 +197,74 @@
     cat
     [(->> c
        (map (fn [[k v]]
-              (str "KEY " (name k) " " (if v "T" "F")))))
-     [(str "body->length-h1b=" (-> c :body count Long/highestOneBit))
-      (str "score->h1b="
-        (if (neg? (:score c)) "-" "+")
-        (-> c :score long Math/abs
-          Long/highestOneBit))]
+              (str "KEY `" (name k) "` " (if v "T" "F")))))
+     [(str "`body`->length-h1b=" (-> c :body count Long/highestOneBit))]
+     (when-some [score (:score c)]
+       [(str "`score`->h1b="
+          (if (neg? score) "-" "+")
+          (-> score long Math/abs
+            Long/highestOneBit))])
      (when-some [cutc (:created_utc c)]
        (let [d (-> cutc
                  (cond-> (string? cutc) (Long/parseLong 10))
                  (* 1000) java.util.Date.)]
-         [(str "created_utc->Y-M="
+         [(str "`created_utc`->Y-M="
             (-> d .getYear (+ 1900))
             "-"
             (-> d .getMonth (+ 1)))]))
-     (->> c :body set
-       (map (fn [chr]
-              (str "body HAS_CHAR " chr))))]))
+     (for [[label rgx] [["WEIRD_CHARS" #"[^\w\s\p{IsLatin}\p{Punct}]"]
+                        ["DIGITS" #"\d"]
+                        ["URL" #"http.://"]
+                        ["QUOTE" #"(?m)^\s*\&gt"]]
+           :when (re-find rgx (:body c))]
+       (str "`body` CONTAINS " label))]))
 
 (comment
   (->> sample-comments
     (mapcat comment-features)
     frequencies
     (into (sorted-map)))
+
+
+  (def d_features-counts
+    (uspark/run-local
+      (fn [sc]
+        (->> (uspark/from-hadoop-text-sequence-file sc "../datasets/reddit-france/comments/RC.seqfile")
+          (spark/map
+            (fn [^String l]
+              (json/read-value l json-mpr)))
+          (spark/flat-map comment-features)
+          (spark/map-to-pair
+            (fn [ftr]
+              (spark/tuple ftr 1)))
+          (spark/reduce-by-key +)
+          spark/collect-map
+          (into (sorted-map))))))
+
+
+  (def d_comments-dv-sample
+    (uspark/run-local
+      (fn [sc]
+        (->> (uspark/from-hadoop-text-sequence-file sc "../datasets/reddit-france/comments/RC.seqfile")
+          (spark/map
+            (fn [^String l]
+              (json/read-value l json-mpr)))
+          (uspark/diversified-sample sc 20
+            #(u/draw-random-from-string (:id %))
+            comment-features)
+          spark/collect shuffle vec))))
+
+  (count @d_comments-dv-sample)
+  => 3172
+
+  (take 10 @d_comments-dv-sample)
+
+  (spit "../reddit-france-comments-dv-sample.json"
+    (json/write-value-as-string
+      @d_comments-dv-sample
+      (json/object-mapper
+        {:encode-key-fn true
+         :pretty true})))
 
   *e)
 

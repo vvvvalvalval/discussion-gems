@@ -36,10 +36,6 @@
   (double
     (/
       (-'
-        Long/MAX_VALUE
-        (-> id-str
-          buddy.core.hash/md5
-          bytes
-          (Arrays/copyOf Long/BYTES)
-          buddy.core.codecs/bytes->long))
-      (-' Long/MAX_VALUE Long/MIN_VALUE))))
+        (long Integer/MAX_VALUE)
+        (-> id-str hash long))
+      (-' (long Integer/MAX_VALUE) (long Integer/MIN_VALUE)))))
