@@ -4,7 +4,9 @@
             [sparkling.destructuring :as s-de]
             [manifold.deferred :as mfd]
             [sparkling.conf :as conf]
-            [sparkling.function])
+            [sparkling.function]
+            [clojure.data.fressian :as fressian]
+            [discussion-gems.utils.encoding :as uenc])
   (:import [org.apache.spark.api.java JavaSparkContext JavaRDD JavaRDDLike JavaPairRDD JavaDoubleRDD]
            [org.apache.spark.broadcast Broadcast]
            (scala Tuple2)
@@ -32,14 +34,16 @@
   "Utility for concisely running Spark jobs locally.
   Given a callback function f accepting a Spark Context,
   returns the result of f wrapped in a Manifold Deferred."
-  [f]
-  (mfd/future
-    (spark/with-context
-      sc (-> (conf/spark-conf)
-           (conf/master "local[*]")
-           (conf/app-name "discussion-gems-local")
-           (conf/set {"spark.driver.allowMultipleContexts" "true"}))
-      (f sc))))
+  ([f] (run-local identity f))
+  ([prepare-conf f]
+   (mfd/future
+     (spark/with-context
+       sc (-> (conf/spark-conf)
+            (conf/master "local[*]")
+            (conf/app-name "discussion-gems-local")
+            (conf/set {"spark.driver.allowMultipleContexts" "true"})
+            prepare-conf)
+       (f sc)))))
 
 
 (defn save-to-hadoop-text+text-seqfile
@@ -71,7 +75,7 @@
             (Text. ^String k)
             (BytesWritable.
               (with-open [baos (ByteArrayOutputStream.)]
-                (let [wtr (ufressian/create-writer baos)]
+                (let [wtr (uenc/fressian-writer baos)]
                   (fressian/write-object wtr v)
                   (.flush baos)
                   (.toByteArray baos)))))))

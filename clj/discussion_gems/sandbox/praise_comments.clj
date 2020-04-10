@@ -11,7 +11,7 @@
             [clojure.repl :refer :all]
             [sparkling.core :as spark]
             [discussion-gems.utils.spark :as uspark]
-            discussion-gems.utils.encoding :as uenc)
+            [discussion-gems.utils.encoding :as uenc])
   (:import (edu.stanford.nlp.pipeline StanfordCoreNLP CoreDocument CoreSentence)))
 
 (require 'sc.api)
@@ -99,12 +99,15 @@
   => 2786
   *e)
 
-(require-python '[discussion_gems_py.sentence_embeddings])
+(comment
+  (require-python '[discussion_gems_py.sentence_embeddings])
 
-(require-python '[numpy])
-(require-python '[sklearn.metrics.pairwise])
-(require-python '[sentence_transformers])
-(require-python '[sentence_transformers.models])
+  (require-python '[numpy])
+  (require-python '[sklearn.metrics.pairwise])
+  (require-python '[sentence_transformers])
+  (require-python '[sentence_transformers.models])
+
+  *e)
 
 #_
 (def sentence-embedding-model
@@ -117,26 +120,21 @@
           :pooling_mode_max_tokens false)]
     (sentence_transformers/SentenceTransformer :modules [cmb pooling-model])))
 
-(defn doc-sentence-similarity
-  [base-sentence-encoded comment-body]
-  (time
-    (let [comment-sentences (-> comment-body trim-markdown sentences)]
-      (double
-        #_
-        (numpy/average
-          (sklearn.metrics.pairwise/cosine_similarity
-            (py. sentence-embedding-model encode comment-sentences)
-            base-sentence-encoded))
-        (discussion_gems_py.sentence_embeddings/doc_sentence_sim
-          base-sentence-encoded
-          sentences)))))
-
 
 (def json-mpr
   (json/object-mapper
     {:decode-key-fn true}))
 
 (comment
+
+  (defn doc-sentence-similarity
+    [base-sentence-encoded comment-body]
+    (time
+      (let [comment-sentences (-> comment-body trim-markdown sentences)]
+        (double
+          (discussion_gems_py.sentence_embeddings/doc_sentence_sim
+            base-sentence-encoded
+            sentences)))))
 
   (def base-sentence "Merci pour ta réponse, j'ai appris plein de choses.")
 
@@ -295,3 +293,26 @@
     count time)
 
   *e)
+
+(require-python '[spacy])
+
+(def fr_pipeline (spacy/load "fr_core_news_md"))
+
+(defn enrich-comment
+  [c]
+  (let [body-raw (trim-markdown (:body c))]
+    (-> c
+      (assoc :dgms_body_raw body-raw)
+      (cond->
+        (some? body-raw)
+        (assoc
+          :dgms_body_vector
+          (let [parsed (fr_pipeline body-raw)]
+            (float-array
+              (py.- parsed vector))))))))
+
+(comment
+
+  *e)
+
+
