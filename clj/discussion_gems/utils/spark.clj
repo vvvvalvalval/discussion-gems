@@ -8,11 +8,12 @@
   (:import [org.apache.spark.api.java JavaSparkContext JavaRDD JavaRDDLike JavaPairRDD JavaDoubleRDD]
            [org.apache.spark.broadcast Broadcast]
            (scala Tuple2)
-           (org.apache.hadoop.io SequenceFile$Writer$Option SequenceFile SequenceFile$Writer Text)
+           (org.apache.hadoop.io SequenceFile$Writer$Option SequenceFile SequenceFile$Writer Text BytesWritable)
            (org.apache.hadoop.conf Configuration)
            (org.apache.hadoop.fs Path)
            (org.apache.hadoop.mapred SequenceFileOutputFormat)
-           (org.apache.hadoop.io.compress DefaultCodec)))
+           (org.apache.hadoop.io.compress DefaultCodec)
+           (java.io ByteArrayOutputStream)))
 
 
 
@@ -57,6 +58,30 @@
     Text Text
     SequenceFileOutputFormat
     DefaultCodec))
+
+(defn save-to-hadoop-text+fressian-seqfile
+  [^String fpath, ^JavaPairRDD rdd]
+  (.saveAsHadoopFile
+    ^JavaPairRDD
+    (spark/map-to-pair
+      (fn [p]
+        (let [k (s-de/key p)
+              v (s-de/value p)]
+          (spark/tuple
+            (Text. ^String k)
+            (BytesWritable.
+              (with-open [baos (ByteArrayOutputStream.)]
+                (let [wtr (ufressian/create-writer baos)]
+                  (fressian/write-object wtr v)
+                  (.flush baos)
+                  (.toByteArray baos)))))))
+      rdd)
+    fpath
+    Text BytesWritable
+    SequenceFileOutputFormat
+    DefaultCodec))
+
+
 
 (defn from-hadoop-text-sequence-file
   "Reads an String RDD from a Hadoop SequenceFile (discards the keys)."

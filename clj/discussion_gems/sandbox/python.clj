@@ -7,7 +7,14 @@
 
 (require-python '[numpy :as np])
 
-(def test-ary (np/array [[1 2][3 4]]))
+(comment
+
+  (def test-ary (np/array [[1 2][3 4]]))
+
+  (float-array (first test-ary))
+  (seq *1)
+
+  *e)
 
 (comment
   (require-python '[discussion_gems_py.test_module])
