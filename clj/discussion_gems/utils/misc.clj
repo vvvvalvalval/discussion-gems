@@ -39,3 +39,7 @@
         (long Integer/MAX_VALUE)
         (-> id-str hash long))
       (-' (long Integer/MAX_VALUE) (long Integer/MIN_VALUE)))))
+
+(defn decreasing
+  [x y]
+  (compare y x))

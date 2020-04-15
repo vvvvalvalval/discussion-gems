@@ -15,7 +15,7 @@
            (org.apache.hadoop.fs Path)
            (org.apache.hadoop.mapred SequenceFileOutputFormat)
            (org.apache.hadoop.io.compress DefaultCodec)
-           (java.io ByteArrayOutputStream)))
+           (java.io ByteArrayOutputStream ByteArrayInputStream)))
 
 
 
@@ -35,14 +35,22 @@
   Given a callback function f accepting a Spark Context,
   returns the result of f wrapped in a Manifold Deferred."
   ([f] (run-local identity f))
-  ([prepare-conf f]
+  ([prep-cnf-or-n-threads f]
    (mfd/future
      (spark/with-context
        sc (-> (conf/spark-conf)
             (conf/master "local[*]")
             (conf/app-name "discussion-gems-local")
             (conf/set {"spark.driver.allowMultipleContexts" "true"})
-            prepare-conf)
+            (as-> cnf
+              (cond
+                (ifn? prep-cnf-or-n-threads)
+                (prep-cnf-or-n-threads cnf)
+
+                (integer? prep-cnf-or-n-threads)
+                (conf/master cnf
+                  (format "local[%d]" f))))
+            prep-cnf-or-n-threads)
        (f sc)))))
 
 
@@ -63,7 +71,8 @@
     SequenceFileOutputFormat
     DefaultCodec))
 
-(defn save-to-hadoop-text+fressian-seqfile
+
+(defn save-to-hadoop-text+bytes-seqfile
   [^String fpath, ^JavaPairRDD rdd]
   (.saveAsHadoopFile
     ^JavaPairRDD
@@ -73,17 +82,20 @@
               v (s-de/value p)]
           (spark/tuple
             (Text. ^String k)
-            (BytesWritable.
-              (with-open [baos (ByteArrayOutputStream.)]
-                (let [wtr (uenc/fressian-writer baos)]
-                  (fressian/write-object wtr v)
-                  (.flush baos)
-                  (.toByteArray baos)))))))
+            (BytesWritable. ^bytes v))))
       rdd)
     fpath
     Text BytesWritable
     SequenceFileOutputFormat
     DefaultCodec))
+
+
+(defn save-to-hadoop-text+fressian-seqfile
+  [^String fpath, ^JavaPairRDD rdd]
+  (save-to-hadoop-text+bytes-seqfile
+    fpath
+    (spark/map-values uenc/fressian-encode
+      rdd)))
 
 
 
@@ -98,7 +110,26 @@
           (.toString v))))))
 
 
+(defn from-hadoop-text+bytes-sequence-file
+  "Reads an String RDD from a Hadoop SequenceFile (discards the keys)."
+  ^JavaRDD
+  [^JavaSparkContext sc, ^String fpath]
+  (->> (.sequenceFile sc fpath Text Text)
+    (spark/map-to-pair
+      (fn [k+v]
+        (let [^Text k (s-de/key k+v)
+              ^BytesWritable v (s-de/value k+v)]
+          (spark/tuple
+            (.toString k)
+            (.copyBytes v)))))))
 
+(defn from-hadoop-fressian-sequence-file
+  "Reads an RDD from a fressian-encoded Hadoop SequenceFile (discards the keys)."
+  ^JavaRDD
+  [^JavaSparkContext sc, ^String fpath]
+  (->> (from-hadoop-text+bytes-sequence-file sc fpath)
+    (spark/map-values uenc/fressian-decode)
+    (spark/values)))
 
 
 (defn diversified-sample

@@ -7,7 +7,9 @@
             [clojure.java.shell]
             [clojure.string :as str]
             [jsonista.core :as json]
-            [discussion-gems.utils.misc :as u])
+            [discussion-gems.utils.misc :as u]
+            [vvvvalvalval.supdate.api :as supd]
+            [clojure.pprint :as pp])
   #_(:import (org.apache.hadoop.io.compress ZStandardCodec)))
 
 (require 'sc.api)
@@ -1155,5 +1157,208 @@
       (json/object-mapper
         {:encode-key-fn true
          :pretty true})))
+
+  *e)
+
+
+(comment ;; Interesting flairs
+
+  (->> ["Culture"
+        "Politique"
+        "Science"
+        "Société"
+        "Écologie"
+        "Économie"]
+    (map #(str "`link_flair_text`=" %))
+    (map
+      {"`link_flair_text`= Gwenn ha du" 2,
+       "`link_flair_text`=2011" 1,
+       "`link_flair_text`=2015" 2,
+       "`link_flair_text`=2017" 1,
+       "`link_flair_text`=2018" 1,
+       "`link_flair_text`=2019" 1,
+       "`link_flair_text`=8==϶" 2,
+       "`link_flair_text`=AMA" 335,
+       "`link_flair_text`=AMA ?" 1,
+       "`link_flair_text`=Abruti" 1,
+       "`link_flair_text`=Actus" 14967,
+       "`link_flair_text`=Aide / Help" 6950,
+       "`link_flair_text`=Article de 2018" 1,
+       "`link_flair_text`=Ask France" 5499,
+       "`link_flair_text`=Ask France " 2008,
+       "`link_flair_text`=BOLOS" 1,
+       "`link_flair_text`=BZH" 1,
+       "`link_flair_text`=Baguette" 1,
+       "`link_flair_text`=Baguette ?" 1,
+       "`link_flair_text`=Banane" 1,
+       "`link_flair_text`=Bolos" 8,
+       "`link_flair_text`=Boloss" 16,
+       "`link_flair_text`=Branlette" 1,
+       "`link_flair_text`=Bretagne" 2,
+       "`link_flair_text`=Béta" 1,
+       "`link_flair_text`=COQ" 11,
+       "`link_flair_text`=COmiQ" 1,
+       "`link_flair_text`=Caca" 1,
+       "`link_flair_text`=Caca poteau" 1,
+       "`link_flair_text`=Cacapoteau" 1,
+       "`link_flair_text`=Compost :coq:" 1,
+       "`link_flair_text`=Compteur" 972,
+       "`link_flair_text`=Coq" 2,
+       "`link_flair_text`=Crédit Agricole " 1,
+       "`link_flair_text`=Cuisine" 1,
+       "`link_flair_text`=Culture" 19271,
+       "`link_flair_text`=Culture ✏️ 🔨" 1,
+       "`link_flair_text`=Céta" 1,
+       "`link_flair_text`=DDP" 1,
+       "`link_flair_text`=Debat" 2,
+       "`link_flair_text`=Divers / Misc" 1,
+       "`link_flair_text`=Doublon" 1,
+       "`link_flair_text`=Découverte" 1,
+       "`link_flair_text`=Départements" 10,
+       "`link_flair_text`=Economie" 1,
+       "`link_flair_text`=FAUSSE NOUVELLE" 1,
+       "`link_flair_text`=Forum Libre" 4827,
+       "`link_flair_text`=Forum Libre :superdupont:" 5,
+       "`link_flair_text`=Forum Libre 🥖" 1,
+       "`link_flair_text`=Gagnant" 1,
+       "`link_flair_text`=Humour" 13339,
+       "`link_flair_text`=Humour 2013" 1,
+       "`link_flair_text`=IMPORTANT" 1,
+       "`link_flair_text`=INTOX" 3,
+       "`link_flair_text`=Intox" 23,
+       "`link_flair_text`=Jan 2018" 1,
+       "`link_flair_text`=K.K. Krieg" 143,
+       "`link_flair_text`=Lapsus" 1,
+       "`link_flair_text`=Love Story" 1,
+       "`link_flair_text`=Low conten" 705,
+       "`link_flair_text`=Low effort" 1067,
+       "`link_flair_text`=Malaise" 1,
+       "`link_flair_text`=Meta" 954,
+       "`link_flair_text`=Moderation" 1,
+       "`link_flair_text`=Modération" 42,
+       "`link_flair_text`=Méta" 1983,
+       "`link_flair_text`=Méta :nsfw-hover:" 2,
+       "`link_flair_text`=Métal" 1,
+       "`link_flair_text`=News" 9242,
+       "`link_flair_text`=Non sécurisé" 8,
+       "`link_flair_text`=Nov 2018" 1,
+       "`link_flair_text`=Nov. 2017" 1,
+       "`link_flair_text`=OP1-Boloss 0" 1,
+       "`link_flair_text`=OP=Con" 1,
+       "`link_flair_text`=Oh là là" 1,
+       "`link_flair_text`=Orange" 1,
+       "`link_flair_text`=Paywall" 2226,
+       "`link_flair_text`=Perfidie" 1,
+       "`link_flair_text`=PetitPain" 1,
+       "`link_flair_text`=Politique" 29695,
+       "`link_flair_text`=Politique (2010)" 1,
+       "`link_flair_text`=Politique - Septembre 2018" 1,
+       "`link_flair_text`=Politique 2012" 1,
+       "`link_flair_text`=Publicité" 1,
+       "`link_flair_text`=Péage" 15,
+       "`link_flair_text`=Péage de lecture numérique" 1,
+       "`link_flair_text`=Retrouvé" 1,
+       "`link_flair_text`=Santé" 8,
+       "`link_flair_text`=Science" 4452,
+       "`link_flair_text`=Sciences" 26,
+       "`link_flair_text`=Sel" 19,
+       "`link_flair_text`=Société" 27748,
+       "`link_flair_text`=Soft Paywall" 1,
+       "`link_flair_text`=Soft paywall" 52,
+       "`link_flair_text`=Sondage" 1,
+       "`link_flair_text`=Sport" 3042,
+       "`link_flair_text`=Super Héros" 1,
+       "`link_flair_text`=Techno" 1,
+       "`link_flair_text`=Technologie" 2,
+       "`link_flair_text`=Technos" 7382,
+       "`link_flair_text`=Trompeur" 2,
+       "`link_flair_text`=Trompeur " 5,
+       "`link_flair_text`=Trompeur !" 1,
+       "`link_flair_text`=Trompeur ?" 169,
+       "`link_flair_text`=edit: piste criminelle exclue" 1,
+       "`link_flair_text`=« Culture »" 1,
+       "`link_flair_text`=Éco - Compteur" 1,
+       "`link_flair_text`=Écologie" 1181,
+       "`link_flair_text`=Économie" 976,
+       "`link_flair_text`=★ Méta ★" 1,
+       "`link_flair_text`=🇫🇷" 1,
+       "`link_flair_type`=richtext" 50794,
+       "`link_flair_type`=text" 36377})
+    (apply +))
+  => 83323
+
+  *e)
+
+(comment ;; some collection-size statistics
+
+  (Long/highestOneBit 127) => 64
+
+  (def body-length-buckets
+    (->
+      ["`body`->length-h1b=0" 95,
+       "`body`->length-h1b=1" 3726,
+       "`body`->length-h1b=1024" 149598,
+       "`body`->length-h1b=128" 1257389,
+       "`body`->length-h1b=16" 451003,
+       "`body`->length-h1b=16384" 2,
+       "`body`->length-h1b=2" 20526,
+       "`body`->length-h1b=2048" 35376,
+       "`body`->length-h1b=256" 871399,
+       "`body`->length-h1b=32" 919013,
+       "`body`->length-h1b=4" 65238,
+       "`body`->length-h1b=4096" 8252,
+       "`body`->length-h1b=512" 436827,
+       "`body`->length-h1b=64" 1316566,
+       "`body`->length-h1b=8" 486043,
+       "`body`->length-h1b=8192" 1357,]
+      (->>
+        (partition 2)
+        (mapv
+          (let [pl (count "`body`->length-h1b=")]
+            (fn [[k v]]
+              {:body-length-h1b (Long/parseLong
+                                  (subs k pl)
+                                  10)
+               :n v})))
+        (sort-by :body-length-h1b u/decreasing)
+        (reductions
+          (fn [{cum-n :cum-n cum-l :cum-length} {bl :body-length-h1b n :n, :as row}]
+            (assoc row
+              :cum-n (+ cum-n n)
+              :cum-length (+ cum-l (* n bl))))
+          {:cum-n 0 :cum-length 0.})
+        rest
+        vec)))
+
+  body-length-buckets
+
+  (pp/print-table body-length-buckets)
+
+  ;| :body-length-h1b |      :n |  :cum-n |   :cum-length |
+  ;|------------------+---------+---------+---------------|
+  ;|            16384 |       2 |       2 |       32768.0 |
+  ;|             8192 |    1357 |    1359 |   1.1149312E7 |
+  ;|             4096 |    8252 |    9611 |   4.4949504E7 |
+  ;|             2048 |   35376 |   44987 |  1.17399552E8 |
+  ;|             1024 |  149598 |  194585 |  2.70587904E8 |
+  ;|              512 |  436827 |  631412 |  4.94243328E8 |  <-- :cum-n: # comments with 512 or more characters in body
+  ;|              256 |  871399 | 1502811 |  7.17321472E8 |
+  ;|              128 | 1257389 | 2760200 |  8.78267264E8 |
+  ;|               64 | 1316566 | 4076766 |  9.62527488E8 |
+  ;|               32 |  919013 | 4995779 |  9.91935904E8 |
+  ;|               16 |  451003 | 5446782 |  9.99151952E8 |
+  ;|                8 |  486043 | 5932825 | 1.003040296E9 |
+  ;|                4 |   65238 | 5998063 | 1.003301248E9 |
+  ;|                2 |   20526 | 6018589 |   1.0033423E9 |
+  ;|                1 |    3726 | 6022315 | 1.003346026E9 |
+  ;|                0 |      95 | 6022410 | 1.003346026E9 |
+
+  ;; Interpretation: comments with >= 512 characters account of about 10% of comments in cardinality,
+  ;; but around 50% of character weight
+
+
+  ;; # of comments in interesting flairs ?
+
+
 
   *e)
