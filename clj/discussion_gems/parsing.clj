@@ -7,6 +7,13 @@
            (edu.stanford.nlp.pipeline StanfordCoreNLP CoreDocument)))
 
 
+(defn backfill-reddit-name
+  [type-prefix {:as s, id :id, nm :name}]
+  (cond-> s
+    (nil? nm)
+    (assoc :name (str type-prefix id))))
+
+
 (comment ;; What HTML tags to we observe upon parsing?
 
   (require '[discussion-gems.utils.encoding :as uenc])

@@ -3,6 +3,17 @@
             [buddy.core.hash])
   (:import (java.util Properties Arrays)))
 
+(defn index-and-map-by
+  [kf vf coll]
+  (persistent!
+    (reduce
+      (fn [tm e]
+        (let [k (kf e)
+              v (vf e)]
+          (assoc! tm k v)))
+      (transient {})
+      coll)))
+
 (defn group-and-map-by
   [kf vf coll]
   (persistent!
@@ -12,6 +23,7 @@
               v (vf e)]
           (assoc! tm k
             (conj
+
               (get tm k [])
               v))))
       (transient {})

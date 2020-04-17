@@ -7,14 +7,18 @@
             [discussion-gems.parsing :as parsing]
             [clojure.reflect :as reflect]
             [sparkling.destructuring :as s-de]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [manifold.deferred :as mfd]
+            [clojure.data.fressian :as fressian]
+            [discussion-gems.utils.misc :as u])
   (:import (org.apache.spark.sql Dataset Row SparkSession RowFactory)
            (org.apache.spark.ml.feature CountVectorizer CountVectorizerModel)
            (org.apache.spark.ml.clustering LDA LDAModel)
-           (org.apache.spark.api.java JavaSparkContext)
+           (org.apache.spark.api.java JavaSparkContext JavaRDD)
            (org.apache.spark.sql.types DataTypes)
            (org.apache.spark.sql.catalyst.expressions GenericRow GenericRowWithSchema)
-           (org.apache.spark.sql functions)))
+           (org.apache.spark.sql functions)
+           (java.util.zip GZIPOutputStream)))
 
 (comment
   ;; https://spark.apache.org/docs/2.1.0/sql-programming-guide.html
@@ -186,8 +190,6 @@
 
   (.show df2 10)
 
-  (.persist df2)
-
 
   *e)
 
@@ -265,11 +267,168 @@
 
   *e)
 
+(defn x->xlnx
+  ^double [x]
+  (let [x (double x)]
+    (if (or (= 0. x) (= 1. x))
+      0.
+      (* x
+        (Math/log x)))))
+(defn h2
+  ^double [p]
+  (let [p (double p)]
+    (/
+      (+
+        (x->xlnx p)
+        (x->xlnx (- 1. p)))
+      (Math/log 0.5))))
+
+
+(defn label-clusters-with-words-PMI
+  [{vocab-size ::vocab-size
+    n-labels ::n-labels
+    :or {vocab-size 10000
+         n-labels 20}}
+   extract-word-ids extract-cluster-assignment
+   sc docs-rdd]
+  (let [wid->n-docs
+        (->> docs-rdd
+          (spark/flat-map-to-pair
+            (fn [doc]
+              (-> (extract-word-ids doc)
+                (->> (map
+                       (fn [wid]
+                         (spark/tuple wid 1))))
+                (conj
+                  (spark/tuple -1 1)))))
+          (spark/reduce-by-key +)
+          (spark/map-to-pair
+            (fn [wid+n-docs]
+              (spark/tuple
+                (s-de/value wid+n-docs)
+                (s-de/key wid+n-docs))))
+          (spark/sort-by-key compare false)
+          (spark/take (inc vocab-size))
+          (u/index-and-map-by s-de/value s-de/key))
+        n-docs (get wid->n-docs -1)
+        wid->n-docs (dissoc wid->n-docs -1)
+        wid->n-docs--bv (uspark/broadcast-var sc wid->n-docs)]
+    (->> docs-rdd
+      (spark/flat-map-to-pair
+        (fn [doc]
+          (let [wid->n-docs (uspark/broadcast-value wid->n-docs--bv)
+                word-ids (set (extract-word-ids doc))
+                cla (extract-cluster-assignment doc)]
+            (into []
+              (comp
+                (map-indexed
+                  (fn [cluster-id p] [cluster-id p]))
+                (mapcat
+                  (fn [[cluster-id p]]
+                    (into [(spark/tuple
+                             (spark/tuple cluster-id -1)
+                             p)]
+                      (comp
+                        (filter #(contains? wid->n-docs %))
+                        (map
+                          (fn [wid]
+                            (spark/tuple
+                              (spark/tuple cluster-id wid)
+                              p))))
+                      (set word-ids)))))
+              cla))))
+      (spark/reduce-by-key +)
+      (spark/map-to-pair
+        (fn [cid+wid->n]
+          (let [cid+wid (s-de/key cid+wid->n)
+                cid (s-de/key cid+wid)
+                wid (s-de/value cid+wid)
+                n (s-de/value cid+wid->n)]
+            (spark/tuple
+              cid
+              (spark/tuple wid n)))))
+      (spark/group-by-key)
+      (spark/map-values
+        (fn [wid+ns]
+          (let [wid->n-docs (uspark/broadcast-value wid->n-docs--bv)
+                n-docs-in-c
+                (-> wid+ns
+                  (->>
+                    (keep
+                      (fn [wid+n]
+                        (let [wid (s-de/key wid+n)]
+                          (when (= -1 wid)
+                            (s-de/value wid+n))))))
+                  (first) (or 0))]
+            {:n-docs-in-cluster n-docs-in-c
+             :characteristic-words
+             (->> wid+ns
+               (keep
+                 (fn [wid+n]
+                   (let [wid (s-de/key wid+n)]
+                     (when-not (= -1 wid)
+                       (let [n-in-c-with-wid (s-de/value wid+n)
+                             n-docs-with-wid (get wid->n-docs wid) ;; seems to be always 1 TODO
+                             MI-score
+                             (-
+                               (+
+                                 (h2 (/ n-docs-with-wid n-docs)) ;; IMPROVEMENT pre-compute (Val, 16 Apr 2020)
+                                 (h2 (/ n-docs-in-c n-docs)))
+                               ;; FIXME factor out
+                               (/
+                                 (+
+                                   (x->xlnx (/ n-in-c-with-wid
+                                              n-docs))
+                                   (x->xlnx (/ (- n-docs-in-c n-in-c-with-wid)
+                                              n-docs))
+                                   (x->xlnx (/ (- n-docs-with-wid n-in-c-with-wid)
+                                              n-docs))
+                                   (x->xlnx (/ (- n-docs
+                                                 (+
+                                                   n-docs-in-c
+                                                   (- n-docs-with-wid n-in-c-with-wid)))
+
+                                              n-docs)))
+                                 (Math/log 0.5)))]
+                         (when (>
+                                 (/ n-in-c-with-wid n-docs-in-c)
+                                 (/ n-docs-with-wid n-docs)))
+                         [wid MI-score n-in-c-with-wid n-docs-with-wid n-docs])))))
+               (sort-by second u/decreasing)
+               (into []
+                 (take n-labels)))})))
+      (spark/map
+        (s-de/fn [(cluster-id cluster-data)]
+          (assoc cluster-data
+            :cluster-id cluster-id))))))
+
+
 (comment
 
 
+  @(uspark/run-local
+     (fn [sc]
+       (->>
+         (spark/parallelize sc
+           [{:text "La pie niche haut l'oie niche bas. Mais le hibou niche où? Le hibou ne niche ni haut ni bas. Le hibou ne niche pas."
+             :clusters [0.01 0.99]}
+            {:text "L'ornythologie se préoccupe de l'étude des oiseaux tels que le hibou."
+             :clusters [0.1 0.9]}
+            {:text "Les espaces propres d'un endomorphisme symmétrique décomposent l'espace en somme directe orthogonale."
+             :clusters [0. 1.]}
+            {:text "Les endomorphismes sont les applications linéaires d'un espace vectoriel dans lui-meme."
+             :clusters [0.02 0.98]}])
+         (label-clusters-with-words-PMI
+           {}
+           #(-> % :text (str/split #"\W+") set)
+           #(-> % :clusters double-array)
+           sc)
+         (spark/collect-map))))
 
   *e)
+
+
+
 
 
 
@@ -298,17 +457,20 @@
        (DataTypes/createArrayType DataTypes/StringType false)
        true)]))
 
+
+
+
 (defn txt-contents-df
   [sprk subm-rdd comments-rdd]
   (let [data-rdd
-        ;; TODO submissions as well (Val, 15 Apr 2020)
         (->>
           (spark/union
             (->> comments-rdd
+              (spark/map #(parsing/backfill-reddit-name "t1_" %))
               (spark/map
                 (fn [c]
                   (merge
-                    (select-keys c [:name :parent_id])
+                    (select-keys c [:name :parent_id :link_id])
                     (when-some [body-raw (parsing/trim-markdown
                                            {::parsing/remove-quotes true}
                                            (:body c))]
@@ -321,9 +483,10 @@
                 (fn [c]
                   (let [body_raw (:dgms_body_raw c)]
                     (assoc
-                      (select-keys c [:name :parent_id])
+                      (select-keys c [:name :parent_id :link_id])
                       :dgms_txt_contents [body_raw])))))
             (->> subm-rdd
+              (spark/map #(parsing/backfill-reddit-name "t3_" %))
               (spark/map
                 (fn [s]
                   (assoc (select-keys s [:name :link_flair_text])
@@ -333,14 +496,24 @@
                       [(some-> s :title
                          (->> (parsing/trim-markdown {::parsing/remove-quotes true})))
                        (some-> s :selftext
-                         (->> (parsing/trim-markdown {::parsing/remove-quotes true ::parsing/remove-code true}))
-                         (as-> selftxt-raw
-                           (when (-> selftxt-raw count (> min-comment-body-length))
-                             selftxt-raw)))]))))))
+                         (->> (parsing/trim-markdown {::parsing/remove-quotes true ::parsing/remove-code true})))]))))))
           (flow-parent-value-to-children
-            map? :name :link_id :link_flair_text
+            (fn node? [v]
+              (not
+                (or (nil? v) (string? v))))
+            :name
+            :link_id
+            (fn get-flair [m]
+              (let [ret (:link_flair_text m)]
+                (when (and (some? ret) (string? ret))
+                  ret)))
             (fn conj-parent-flair [child flair]
               (assoc child :link_flair_text flair)))
+          (spark/filter
+            (fn contents-length-above-threshold? [m]
+              (-> m :dgms_txt_contents
+                (->> (map count) (reduce + 0))
+                (>= min-comment-body-length))))
           (spark/filter
             #(contains? flairs-of-interest
                (:link_flair_text %))))
@@ -392,6 +565,11 @@
     (take 10))
 
   (->> (uenc/json-read
+         (io/resource "reddit-france-comments-dv-sample.json"))
+    (map :name)
+    (take 10))
+
+  (->> (uenc/json-read
          (io/resource "reddit-france-submissions-dv-sample.json"))
     (keep :name)
     (take 10))
@@ -419,23 +597,23 @@
   *e)
 
 
-(comment ;; actual clustering
+(comment                                                    ;; actual clustering
 
-  (do
-    (def sc
-      (spark/spark-context
-        (-> (conf/spark-conf)
-          (conf/master "local[2]")
-          (conf/app-name "discussion-gems-local")
-          (conf/set {"spark.driver.allowMultipleContexts" "true"}))))
 
-    (def ^SparkSession sprk
-      (-> (SparkSession/builder)
-        (.sparkContext (JavaSparkContext/toSparkContext sc))
-        (.getOrCreate))))
+  [(def sc
+     (spark/spark-context
+       (-> (conf/spark-conf)
+         (conf/master "local[4]")
+         (conf/app-name "discussion-gems-local")
+         (conf/set {"spark.driver.allowMultipleContexts" "true"}))))
 
-  (def early-2019-ts
-    (quot (.getTime #inst "2019-01-01") 1000))
+   (def ^SparkSession sprk
+     (-> (SparkSession/builder)
+       (.sparkContext (JavaSparkContext/toSparkContext sc))
+       (.getOrCreate)))]
+
+  (def early-ts
+    (quot (.getTime #inst "2018-09-01") 1000))
 
   (defn created-lately?
     [m]
@@ -443,43 +621,162 @@
       (as-> ts
         (cond-> ts
           (string? ts) (Long/parseLong 10)))
-      (>= early-2019-ts)))
+      (>= early-ts)))
 
 
   [(def subm-rdd
      (->>
        (uspark/from-hadoop-text-sequence-file sc "../datasets/reddit-france/submissions/RS.seqfile")
+       (spark/repartition 200)
+       (spark/map uenc/json-read)
+       (spark/filter :created_utc)
        (spark/filter created-lately?)))
    (def comments-rdd
-     (->> (uspark/from-hadoop-text-sequence-file sc "../datasets/reddit-france/comments/RC.seqfile")
+     (->> (uspark/from-hadoop-fressian-sequence-file sc "../derived-data/reddit-france/comments/RC-enriched_v1.seqfile")
+       (spark/filter :created_utc)
        (spark/filter created-lately?)))]
 
+  (spark/count subm-rdd) => 15135
+  (spark/count comments-rdd)
 
   (def txt-ctnts-df
     (txt-contents-df sprk subm-rdd comments-rdd))
 
+  (def n-docs
+    (spark/count txt-ctnts-df))
 
-  [(def ^CountVectorizerModel cv-model
-     (-> (CountVectorizer.)
-       (.setInputCol "txt_contents_words")
-       (.setOutputCol "txt_contents_bow")
-       (.setVocabSize 10000)
-       (.fit txt-ctnts-df)))
+  (def done_count-vec
+    (mfd/future
+      [(def ^CountVectorizerModel cv-model
+         (-> (CountVectorizer.)
+           (.setInputCol "txt_contents_words")
+           (.setOutputCol "txt_contents_bow")
+           (.setVocabSize 10000)
+           (.fit txt-ctnts-df)))
 
-   (def txt-ctnts-df-1
-     (.transform cv-model txt-ctnts-df))
+       (def txt-ctnts-df-1
+         (-> txt-ctnts-df
+           (->> (.transform cv-model))
+           #_(.persist (:disk-only spark/STORAGE-LEVELS))))]))
+
+  (def done_lda
+    (mfd/chain done_count-vec
+      (fn [_]
+        (def ^LDAModel lda-model
+          (-> (LDA.)
+            (.setK 100)
+            (.setFeaturesCol "txt_contents_bow")
+            (.fit txt-ctnts-df-1)))
+
+        (def txt-ctnts-df-2
+          (.transform lda-model
+            (-> txt-ctnts-df-1
+              #_(.filter
+                  (.isNotEmpty (functions/col "txt_contents_words")))))))))
+
+  (spark/count txt-ctnts-df-1) => 3370
+  (spark/count txt-ctnts-df-2) => 3370
+
+  (->> txt-ctnts-df-1
+    (spark/sample false 1e-2 43255)
+    (spark/collect)
+    (vec))
+
+  (->> txt-ctnts-df-2
+    (spark/take 10) #_#_
+    (spark/sample false 1e-3 43255)
+    (spark/collect)
+    vec
+    (mapv
+      (fn [^GenericRowWithSchema row]
+        (-> row
+          (.values)
+          (vec)))))
+  ;; TODO comments still missing!
+  ;; TODO remove URLs, figures
+  ;; TODO stemming
+
+
+  org.apache.spark.ml.linalg.DenseVector
+  org.apache.spark.sql.Dataset
+
+  (->> txt-ctnts-df-2
+    .toJavaRDD
+    (spark/map
+      (fn [^GenericRowWithSchema row]
+        (-> row
+          (.values)
+          (vec))))
+    (label-clusters-with-words-PMI
+      {::vocab-size 20000}
+      (fn [row-vec]
+        (set
+          (let [words
+                (-> row-vec
+                  (nth 2)
+                  (.array)
+                  vec)]
+            (into #{}
+              (comp
+                (mapcat
+                  (fn [n-gram-size]
+                    (partition n-gram-size 1 words)))
+                (map vec))
+              [1 2 3]))))
+      (fn [row-vec]
+        (set
+          (-> row-vec
+            (nth 4)
+            (.values))))
+      sc)
+    (spark/collect)
+    (sort-by :n-docs-in-cluster))
 
 
 
-   (def ^LDAModel lda-model
-     (-> (LDA.)
-       (.setK 100)
-       (.setFeaturesCol "txt_contents_bow")
-       (.fit txt-ctnts-df-1)))
+  (spark/group-by-key)
 
-   (def txt-ctnts-df-1
-     (.transform lda-model txt-ctnts-df-1))]
 
+  (.printSchema txt-ctnts-df-1)
+  (.printSchema txt-ctnts-df-2)
+
+  (.show (.describeTopics lda-model) false)
+
+  (->> (.describeTopics lda-model)
+    .collectAsList
+    (mapv (fn [^GenericRowWithSchema row]
+            (-> row
+              (.values)
+              (vec)
+              (nth 1)
+              .array
+              (->>
+                (mapv
+                  (fn [term-i]
+                    (aget (.vocabulary cv-model) term-i))))))))
+
+  (->> txt-ctnts-df-1
+    (spark/take 10)
+    (mapv (fn [^GenericRowWithSchema row]
+            (-> row
+              (.values)
+              (vec)
+              (nth 3)))))
+  (.show txt-ctnts-df-1 10)
+
+
+  (.save cv-model "../models/lda_0/cv-model")
+  org.apache.spark.ml.linalg.SparseVector
+
+  (with-open [os
+              (GZIPOutputStream.
+                (io/output-stream "../models/lda_0-cv-model"))]
+    (let [wtr (uenc/fressian-writer os)]
+      (fressian/write-object wtr
+        (vec
+          (.vocabulary cv-model)))))
+
+  (.stop sc)
 
   *e)
 
