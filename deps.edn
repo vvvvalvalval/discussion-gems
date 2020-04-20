@@ -27,6 +27,8 @@
   org.apache.spark/spark-mllib_2.10 {:mvn/version "2.1.0"}
   gorillalabs/sparkling {:mvn/version "2.1.3"}
   org.elasticsearch/elasticsearch-spark-20_2.10 {:mvn/version "7.0.1"}
+  org.apache.lucene/lucene-core {:mvn/version "8.5.1"}
+  org.apache.lucene/lucene-analyzers-common {:mvn/version "8.5.1"}
 
   net.mikera/core.matrix {:mvn/version "0.62.0"}
   net.mikera/vectorz-clj {:mvn/version "0.48.0"}
@@ -42,6 +44,7 @@
  :aliases
  {:dev ;; Code directories and dependencies useful during development.
   {:extra-deps {;; debugging tools
+                criterium {:mvn/version "0.4.5"}
                 vvvvalvalval/scope-capture {:mvn/version "0.3.2"}
                 vvvvalvalval/scope-capture-nrepl {:mvn/version "0.2.0"}}}
 

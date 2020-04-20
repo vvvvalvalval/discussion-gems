@@ -407,6 +407,57 @@
             :cluster-id cluster-id))))))
 
 
+(defn add-cluster-samples
+  [{:as _opts, n-examples ::n-example-docs
+    :or {n-examples 12}}
+   id-col-name clusters-assignement-col-name
+   clusters-label-summary
+   ^Dataset df]
+  (let [cluster-id->p-threshold
+        (double-array
+          (->> clusters-label-summary
+            (sort-by :cluster-id)
+            (mapv (fn [cluster]
+                    (* 5.                                   ;; NOTE reduces the probability of sampling too few. (Val, 17 Apr 2020)
+                      n-examples
+                      (/ 1. (:n-docs-in-cluster cluster)))))))
+        min-threshold (double (apply min (seq cluster-id->p-threshold)))
+        cluster-id->sampled
+        (->> df
+          .toJavaRDD
+          (spark/flat-map
+            (let [schm (.schema df)
+                  id-col-i (.fieldIndex schm id-col-name)
+                  cla-col-i (.fieldIndex schm clusters-assignement-col-name)]
+              (fn [^GenericRow row]
+                (vec
+                  (let [id (.get row (int id-col-i))
+                        s (u/draw-random-from-string id)]
+                    (when (< s min-threshold)
+                      (let [^DenseVector cla (.get row (int cla-col-i))
+                            cla-ps (.values cla)]
+                        (areduce cla-ps cluster-id sel []
+                          (let [cluster-threshold (*
+                                                    (aget cla-ps cluster-id)
+                                                    (aget cluster-id->p-threshold cluster-id))]
+                            (cond-> sel
+                              (< s cluster-threshold) (conj [cluster-id row])))))))))))
+          (spark/filter some?)
+          (spark/collect)
+          (u/group-and-map-by first second))]
+    (->> clusters-label-summary
+      (mapv
+        (fn [cluster]
+          (assoc cluster
+            :doc-examples
+            (into []
+              (take n-examples)
+              (shuffle
+                (get cluster-id->sampled (:cluster-id cluster) [])))))))))
+
+
+
+
 (comment
 
 
@@ -715,9 +766,8 @@
     (vec))
 
   (->> txt-ctnts-df-2
-    (spark/take 10) #_#_
-    (spark/sample false 1e-3 43255)
-    (spark/collect)
+    (spark/take 10) #_#_(spark/sample false 1e-3 43255)
+      (spark/collect)
     vec
     (mapv
       #_(let [words-col-i (.fieldIndex (.schema txt-ctnts-df-2)
@@ -2965,6 +3015,21 @@
                            [["problème"] 1.450992384716132E-7 0.4354229840968585 3592 245558]
                            [["a" "9"] 1.42193487248643E-7 0.06071203512765133 128 245558]],
     :cluster-id 13}]
+
+
+  (def clusters-summary *1)
+
+  (def p_clusters-summary-w-examples
+    (mfd/future
+      (add-cluster-samples
+        {}
+        "id" "topicDistribution"
+        clusters-summary
+        txt-ctnts-df-2)))
+
+  (reverse @p_clusters-summary-w-examples)
+  ;; TODO: problem: basically only the top clusters are populated. This suggests that the algorithm is bad at hard cluster assignment, or maybe that effectively clusters don't correspond well to topics. (Val, 17 Apr 2020)
+  ;; TODO: trye to turn the topicsDistribution into hard assignment, and try labelling with that method.
 
   (spark/group-by-key)
 
