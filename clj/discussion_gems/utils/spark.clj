@@ -15,7 +15,10 @@
            (org.apache.hadoop.fs Path)
            (org.apache.hadoop.mapred SequenceFileOutputFormat)
            (org.apache.hadoop.io.compress DefaultCodec)
-           (java.io ByteArrayOutputStream ByteArrayInputStream)))
+           (java.io ByteArrayOutputStream ByteArrayInputStream)
+           (org.apache.spark.sql Dataset RowFactory SparkSession)
+           (org.apache.spark.sql.types StructType DataType StructField DataTypes)
+           (org.apache.spark.sql.catalyst.expressions GenericRow)))
 
 
 
@@ -172,3 +175,140 @@
                       0.0
                       ftr-counts)))]
             (> prob-threshold (draw-random e))))))))
+
+;; ------------------------------------------------------------------------------
+;; Dataframes
+
+(defn add-columns-to-dataframe
+  "Transforms a Spark Dataframe by computing and adding new columns to it.
+
+  Given a seq of [^StructField new-field, input-col-names, f] tuples and an input Dataframe,
+  creates a new DataFrame with as many new columns, with values computed by applying the function `f`
+  to the values corresponding to `input-col-names`, packed in a seq."
+  [new-fields+input-col-names+compute-fns
+   ^Dataset input-df]
+  (let [old-sch (.schema input-df)
+        new-sch (StructType.
+                  (into-array StructField
+                    (into (vec (.fields old-sch))
+                      (mapv
+                        (fn [[^StructField new-field _ _]]
+                          new-field)
+                        new-fields+input-col-names+compute-fns))))
+        old-row-length (int (count (.fields old-sch)))
+        row-length (int (count (.fields new-sch)))]
+    (.createDataFrame (.sparkSession input-df)
+      ^JavaRDD
+      (spark/map
+        (let [setter-fns
+              (->> new-fields+input-col-names+compute-fns
+                (map-indexed
+                  (fn [j [^StructField _new-field, input-col-names, f]]
+                    (let [deps-pos (int-array
+                                     (->> input-col-names
+                                       (mapv
+                                         (fn [input-col-name]
+                                           (.fieldIndex old-sch input-col-name)))))
+                          deps-length (int (count deps-pos))
+                          dest-idx (int (+ j old-row-length))
+                          setter-fn
+                          (fn [^objects old-values, ^objects dest-arr]
+                            (let [deps-arr (object-array deps-length)]
+                              (loop [i (int 0)]
+                                (when (< i deps-length)
+                                  (aset deps-arr i
+                                    (aget old-values
+                                      (aget deps-pos i)))
+                                  (recur (unchecked-inc-int i))))
+                              (let [deps-seq deps-arr ;; NOTE native arrays support destructuring, that's why I'm not converting to another sequence type (Val, 23 Apr 2020)
+                                    result (f deps-seq)]
+                                (aset dest-arr dest-idx result))))]
+                      setter-fn)))
+                object-array)]
+          (fn [^GenericRow old-row]
+            (let [dest-arr (object-array row-length)
+                  old-values (.values old-row)]
+              (System/arraycopy
+                old-values 0
+                dest-arr 0
+                old-row-length)
+              (areduce setter-fns j ret nil
+                (let [setter-fn (aget setter-fns j)]
+                  (setter-fn old-values dest-arr)))
+              (RowFactory/create dest-arr))))
+        (.toJavaRDD input-df))
+      new-sch)))
+
+(comment "examples of" add-columns-to-dataframe
+
+  [(def sc
+     (spark/spark-context
+       (-> (conf/spark-conf)
+         (conf/master "local[4]")
+         (conf/app-name "discussion-gems-local")
+         (conf/set {"spark.driver.allowMultipleContexts" "true"}))))
+
+   (def ^SparkSession sprk
+     (-> (SparkSession/builder)
+       (.sparkContext (JavaSparkContext/toSparkContext sc))
+       (.getOrCreate)))]
+
+  (def input-df
+    (.createDataFrame sprk
+      ^JavaRDD
+      (spark/map
+        (fn [vs]
+          (RowFactory/create
+            (object-array vs)))
+        (spark/parallelize sc
+          [[0 "coucou"]
+           [1 "Comment ça va?"]
+           [2 "Mythe"]]))
+      (StructType.
+        (into-array StructField
+          [(DataTypes/createStructField "id" DataTypes/LongType false)
+           (DataTypes/createStructField "text" DataTypes/StringType true)]))))
+
+  (.show input-df)
+  ;+---+--------------+
+  ;| id|          text|
+  ;+---+--------------+
+  ;|  0|        coucou|
+  ;|  1|Comment ça va?|
+  ;|  2|         Mythe|
+  ;+---+--------------+
+
+  (def dest-df
+    (add-columns-to-dataframe
+      [[(DataTypes/createStructField "id_text" DataTypes/StringType true)
+        ["text" "id"]
+        (fn [[text id]]
+          (str id "_" text))]]
+      input-df))
+
+  (.show dest-df)
+  ;+---+--------------+----------------+
+  ;| id|          text|         id_text|
+  ;+---+--------------+----------------+
+  ;|  0|        coucou|        0_coucou|
+  ;|  1|Comment ça va?|1_Comment ça va?|
+  ;|  2|         Mythe|         2_Mythe|
+  ;+---+--------------+----------------+
+
+
+  (.stop sc)
+  *e)
+
+
+(defn extract-column-from-dataframe
+  "Convenience function from transforming a column of Dataframe into an RDD."
+  ^JavaRDD [^String col-name, ^Dataset input-df]
+  (spark/map
+    (let [col-idx (.fieldIndex
+                    (.schema input-df)
+                    col-name)]
+      (fn extract-col [^GenericRow row]
+        (.get row col-idx)))
+    (.toJavaRDD
+      input-df)))
+

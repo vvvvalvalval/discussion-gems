@@ -55,3 +55,10 @@
 (defn decreasing
   [x y]
   (compare y x))
+
+
+
+(defn arr-doubles-sum
+  [^doubles arr]
+  (areduce arr idx s 0.
+    (+ (double s) (aget arr idx))))

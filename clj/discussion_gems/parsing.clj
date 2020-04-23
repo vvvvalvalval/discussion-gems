@@ -12,6 +12,9 @@
            (org.apache.lucene.analysis.tokenattributes CharTermAttribute)
            (org.apache.lucene.analysis.fr FrenchAnalyzer)))
 
+
+;; TODO numbers ?
+
 ;; ------------------------------------------------------------------------------
 ;; Markdown parsing
 
@@ -159,7 +162,28 @@
         (let [b (first cont)]
           (and
             (string? b)
-            (str/starts-with? ">" b)))))))
+            (str/starts-with? b ">")))))))
+
+(comment
+  (quote-paragraph?
+    {:tag :p, :attrs nil, :content ["> Bah sachant que plus de securitaire c'est les minorités qui vont morfler ...."]})
+  => true
+
+  *e)
+
+
+(defn clean-special-characters
+  [^String txt]
+  (str/replace txt
+    #"(\&\#x\d{3}[a-zA-Z];|https?://(www\.)?)"
+    ""))
+
+(comment
+  (clean-special-characters
+    "Voir cet article: https://www.lemonde.fr/url-de/l-article")
+  => "Voir cet article: lemonde.fr/url-de/l-article"
+
+  *e)
 
 
 (defn trim-markdown
@@ -212,7 +236,29 @@
                    (markdown.core/md-to-html-string txt))
                  [:content 1 :content])]
            (run! aux html-forest)))
-       (.toString sb)))))
+       (-> (.toString sb)
+         clean-special-characters)))))
+
+
+(comment
+
+
+
+  (->> (io/resource "reddit-france-comments-dv-sample.json")
+    (uenc/json-read)
+    (keep :body)
+    (filter trim-markdown)
+    (filter
+      (fn [body]
+        (re-seq #"\&\#x\d{3}[a-zA-Z];"
+          (trim-markdown
+            {::remove-quotes true ::remove-code true}
+            body))))
+    (keep trim-markdown)
+    (take 10)
+    vec)
+
+  *e)
 
 
 ;; ------------------------------------------------------------------------------
