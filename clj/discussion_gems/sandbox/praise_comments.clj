@@ -306,6 +306,7 @@
 
 (defn enrich-comment
   [c]
+  (throw (ex-info "STOP!" {}))
   (merge c
     (when-some [md-html-forest (parsing/md->html-forest (:body c))]
       (let [body-raw (parsing/raw-text-contents
@@ -313,6 +314,7 @@
                         ::parsing/remove-quotes true}
                        md-html-forest)]
         {:dgms_body_raw body-raw
+         #_#_
          :dgms_body_vector
          (py/with-gil
            (float-array
@@ -327,14 +329,20 @@
 
 (comment
 
-  (->> @d_sample
-    (take 100)
-    (mapv enrich-comment)
-    time)
+  (-> (io/resource "reddit-france-comments-dv-sample.json")
+    (json/read-value json-mpr)
+    (->>
+      (take 10)
+      (mapv enrich-comment)))
 
-  (->> @d_sample
-    (run! enrich-comment)
-    time)
+  (-> (io/resource "reddit-france-comments-dv-sample.json")
+    (json/read-value json-mpr)
+    count #_
+    (->>
+      (run! enrich-comment)
+      time))
+
+  (/ 150470.826249 3172)
 
   ;; Saving enriched comments
   (def d_saved-enriched
@@ -343,14 +351,16 @@
         (conf/master cnf "local[4]"))
       (fn [sc]
         (->>
-          (uspark/from-hadoop-text-sequence-file sc "../datasets/reddit-france/comments/RC.seqfile")
-          (spark/repartition 1000)
+          (uspark/from-hadoop-fressian-sequence-file sc "../derived-data/reddit-france/comments/RC-enriched_v1.seqfile")
+          #_#_#_
+          (uspark/from-hadoop-text-sequence-file sc "../datasets/reddit-france/comments/RC.seqfile") ;; FIXME
+          (spark/repartition 1000) ;; FIXME
           (spark/map
             (fn [^String l]
               (json/read-value l json-mpr)))
           (spark/map-to-pair (fn [c] (spark/tuple "" (enrich-comment c))))
           (uspark/save-to-hadoop-text+fressian-seqfile
-            "../derived-data/reddit-france/comments/RC-enriched_v1.seqfile")))))
+            "../derived-data/reddit-france/comments/RC-enriched_v2.seqfile")))))
 
   *e)
 
@@ -426,7 +436,6 @@
   *e)
 
 
-@
 
 (comment ;; Some statistics
 
