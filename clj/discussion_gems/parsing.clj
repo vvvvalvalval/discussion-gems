@@ -6,11 +6,12 @@
             [clojure.java.io :as io]
             [discussion-gems.utils.encoding :as uenc])
   (:import (edu.stanford.nlp.ling CoreLabel)
-           (edu.stanford.nlp.pipeline StanfordCoreNLP CoreDocument)
+           (edu.stanford.nlp.pipeline StanfordCoreNLP CoreDocument CoreSentence)
            (org.apache.lucene.analysis Analyzer)
            (java.util ArrayList)
            (org.apache.lucene.analysis.tokenattributes CharTermAttribute)
-           (org.apache.lucene.analysis.fr FrenchAnalyzer)))
+           (org.apache.lucene.analysis.fr FrenchAnalyzer)
+           (edu.stanford.nlp.tagger.maxent MaxentTagger)))
 
 
 ;; TODO numbers ?
@@ -186,58 +187,71 @@
   *e)
 
 
+
+(defn md->html-forest
+  "Parses a Reddit markdown into a recursive data structure."
+  [^String md-txt]
+  (if (= md-txt "[deleted]")
+    nil
+    (get-in
+      (crouton.html/parse-string
+        (markdown.core/md-to-html-string md-txt))
+      [:content 1 :content])))
+
+
+(defn raw-text-contents
+  [{:as _opts, remove-quotes? ::remove-quotes remove-code? ::remove-code}
+   md-html-forest]
+  (let [sb (StringBuilder.)]
+    (letfn
+      [(aux [node]
+         (cond
+           (string? node)
+           (.append sb ^String node)
+
+           (map? node)
+           (case (:tag node)
+             (:img)
+             (do nil)
+
+             (:p)
+             (when-not (and remove-quotes? (quote-paragraph? node))
+               (run! aux (:content node))
+               (.append sb "\n\n"))
+
+             (:code)
+             (when-not remove-code?
+               (run! aux (:content node))
+               (.append sb "\n\n"))
+
+             (:h1 :h2 :h3 :h4 :h5 :h6 :ol :ul :hr :br)
+             (do
+               (run! aux (:content node))
+               (.append sb "\n\n"))
+
+             (:li)
+             (do
+               (run! aux (:content node))
+               (.append sb "\n"))
+
+             (:a :i :em :strong)
+             (do
+               (run! aux (:content node))
+               (.append sb " "))
+
+             (run! aux (:content node)))))]
+      (run! aux md-html-forest))
+    (-> (.toString sb)
+      clean-special-characters)))
+
+
 (defn trim-markdown
-  ([txt] (trim-markdown {} txt))
-  ([{:as _opts, remove-quotes? ::remove-quotes remove-code? ::remove-code}
-    ^String txt]
-   (if (= txt "[deleted]")
+  ([md-txt] (trim-markdown {} md-txt))
+  ([opts md-txt]
+   (if (= md-txt "[deleted]")
      nil
-     (let [sb (StringBuilder.)]
-       (letfn
-         [(aux [node]
-            (cond
-              (string? node)
-              (.append sb ^String node)
-
-              (map? node)
-              (case (:tag node)
-                (:img)
-                (do nil)
-
-                (:p)
-                (when-not (and remove-quotes? (quote-paragraph? node))
-                  (run! aux (:content node))
-                  (.append sb "\n\n"))
-
-                (:code)
-                (when-not remove-code?
-                  (run! aux (:content node))
-                  (.append sb "\n\n"))
-
-                (:h1 :h2 :h3 :h4 :h5 :h6 :ol :ul :hr :br)
-                (do
-                  (run! aux (:content node))
-                  (.append sb "\n\n"))
-
-                (:li)
-                (do
-                  (run! aux (:content node))
-                  (.append sb "\n"))
-
-                (:a :i :em :strong)
-                (do
-                  (run! aux (:content node))
-                  (.append sb " "))
-
-                (run! aux (:content node)))))]
-         (let [html-forest
-               (get-in
-                 (crouton.html/parse-string
-                   (markdown.core/md-to-html-string txt))
-                 [:content 1 :content])]
-           (run! aux html-forest)))
-       (-> (.toString sb)
-         clean-special-characters)))))
+     (let [html-forest (md->html-forest md-txt)]
+       (raw-text-contents opts html-forest)))))
 
 
 (comment
@@ -259,6 +273,55 @@
     vec)
 
   *e)
+
+
+(defn hyperlinks
+  [md-html-forest]
+  (letfn
+    [(find-links [node]
+       (if (string? node)
+         (mapv first
+           (re-seq
+             ;; NOTE for URLs in the text, a / is mandatory.
+             #"((https?://)?[\w\-]+(\.[\w\-]+)+/[-a-zA-Z0-9+&@#/%?=~_|!:,;.]*[-a-zA-Z0-9+&@#/%=~_|])"
+             node))
+         (let [tag (:tag node)]
+           (if (= tag :a)
+             (when-some [href (some-> node :attrs :href
+                                (as-> href
+                                  (when-not (str/blank? href)
+                                    href)))]
+               [href])
+             (mapcat find-links (:content node))))))]
+    (into []
+      (mapcat find-links)
+      md-html-forest)))
+
+
+(comment
+
+  (hyperlinks
+    (md->html-forest
+      "Voir [ce site](https://news.ycombinator.com)
+
+      Tu peux aussi regarder sur service-public.fr/mon-renseignement/coucou323/mythe.htm?q=324d&z=44lfdsfs%32#xyz990."))
+  => ["https://news.ycombinator.com" "service-public.fr/mon-renseignement/coucou323/mythe.htm?q=324d&z=44lfdsfs%32#xyz990"]
+
+  *e)
+
+
+(defn formatting-count
+  [md-html-forest]
+  (->> {:content md-html-forest}
+    (tree-seq map? :content)
+    (filter map?)
+    (map :tag)
+    (filter #{:code :h1 :h2 :h3 :h4 :h5 :h6 :ol :ul :hr :a :i :em :strong})
+    count))
+
+
+
+
 
 
 ;; ------------------------------------------------------------------------------
@@ -883,6 +946,143 @@
   ;                   Overhead used : 2.014804 ns
 
   *e)
+
+
+
+;; ------------------------------------------------------------------------------
+;; Syntactic analysis
+
+(def syntax-stats-fr
+  (let [pos-pipeline
+        (delay
+          (StanfordCoreNLP.
+            (u/as-java-props
+              ;; https://stanfordnlp.github.io/CoreNLP/annotators.html
+              {"annotators" (str/join "," ["tokenize" "ssplit" "pos"])
+               "tokenize.language" "French"
+               "tokenize.keepeol" "true"
+               "pos.model" "french.tagger"})))]
+    (fn syntax-stats-fr [^String raw-txt]
+      (let [doc (doto
+                  (CoreDocument. raw-txt)
+                  (->> (.annotate ^StanfordCoreNLP @pos-pipeline)))]
+        {:n-sentences (count (.sentences doc))
+         :pos-freqs (->> doc
+                      .tokens
+                      (map
+                        (fn [^CoreLabel lbl]
+                          (.tag lbl)))
+                      frequencies)}))))
+
+(comment
+
+  (def txts
+    (->> (io/resource "reddit-france-comments-dv-sample.json") ;; CAVEAT using diversified sample, which may be highly skewed. (Val, 20 Apr 2020)
+      (uenc/json-read)
+      (keep :body)
+      (keep trim-markdown)
+      (take 100)
+      vec))
+
+  (def pos-pipeline
+    (delay
+      (StanfordCoreNLP.
+        (u/as-java-props
+          {"annotators" (str/join "," ["tokenize" "ssplit" "pos"])
+           "tokenize.language" "French"
+           "tokenize.keepeol" "true"
+           "pos.model" "french.tagger"}))))
+
+  @pos-pipeline
+
+  (defn decompose-sentences
+    [txt]
+    (let [doc (doto
+                (CoreDocument. txt)
+                (->> (.annotate ^StanfordCoreNLP @pos-pipeline)))]
+      (->> (.sentences doc)
+        (mapv
+          (fn [^CoreSentence sentence]
+            [(.text sentence)
+             (->> (.tokens sentence)
+               (mapv
+                 (fn [^CoreLabel lbl]
+                   [(.value lbl) (.tag lbl)])))])))))
+
+  (def sntc1 "Le rapide renard brun saute par dessus le chien paresseux de Balkany. Alors, qu'est-ce que t'en dis ?")
+
+  (decompose-sentences sntc1)
+  =>
+  [["Le rapide renard brun saute par dessus le chien paresseux de Balkany."
+    [["Le" "DET"]
+     ["rapide" "ADJ"]
+     ["renard" "NC"]
+     ["brun" "ADJ"]
+     ["saute" "V"]
+     ["par" "P"]
+     ["dessus" "ADV"]
+     ["le" "DET"]
+     ["chien" "NC"]
+     ["paresseux" "ADJ"]
+     ["de" "P"]
+     ["Balkany" "NPP"]
+     ["." "PUNC"]]]
+   ["Alors, qu'est-ce que t'en dis ?"
+    [["Alors" "ADV"]
+     ["," "PUNC"]
+     ["qu'" "CS"]
+     ["est" "V"]
+     ["-ce" "CLS"]
+     ["que" "CS"]
+     ["t'" "CLS"]
+     ["en" "CLO"]
+     ["dis" "V"]
+     ["?" "PUNC"]]]]
+
+  (syntax-stats-fr sntc1)
+  =>
+  {:n-sentences 2,
+   :pos-freqs {"ADV" 2, "ADJ" 3, "CLO" 1, "CLS" 2, "CS" 2, "PUNC" 3, "P" 2, "V" 3, "DET" 2, "NC" 2, "NPP" 1}}
+
+
+  (->> txts (str/join "\n") syntax-stats-fr)
+  =>
+  {:n-sentences 276,
+   :pos-freqs {"ADV" 465,
+               "ADJ" 360,
+               "VPP" 137,
+               "PROREL" 78,
+               "CLO" 90,
+               "CLS" 304,
+               "CS" 109,
+               "VPR" 18,
+               "DETWH" 1,
+               "PUNC" 641,
+               "VIMP" 5,
+               "C" 25,
+               "CC" 164,
+               "P" 619,
+               "V" 541,
+               "ET" 245,
+               "DET" 720,
+               "CL" 8,
+               "N" 142,
+               "VS" 14,
+               "PRO" 81,
+               "ADJWH" 2,
+               "NC" 798,
+               "I" 9,
+               "ADVWH" 9,
+               "NPP" 153,
+               "VINF" 189,
+               "CLR" 28}}
+
+
+  *e)
+
+
+
+
 
 ;; ------------------------------------------------------------------------------
 ;; Reddit

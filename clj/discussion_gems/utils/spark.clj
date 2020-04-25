@@ -297,6 +297,7 @@
 
 
   (.stop sc)
+
   *e)
 
 
@@ -311,4 +312,10 @@
         (.get row col-idx)))
     (.toJavaRDD
       input-df)))
+
+(defn col-reader-fn
+  [df col-name]
+  (let [col-idx (int (.fieldIndex ^StructType (.schema df) ^String col-name))]
+    (fn read-col-in-row [^GenericRow row]
+      (.get row col-idx))))
 

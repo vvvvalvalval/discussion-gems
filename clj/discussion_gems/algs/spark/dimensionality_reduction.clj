@@ -49,7 +49,7 @@
               (fn [idx->n]
                 (aset log-term-counts-arr
                   (int (s-de/key idx->n))
-                  (double (s-de/value idx->n))))
+                  (double (Math/log (s-de/value idx->n)))))
               term_idx->n)
             (->ppmiModel log-n-terms log-n-docs log-term-counts-arr)))))))
 
@@ -165,9 +165,9 @@
               (->>
                 (spark/map
                   (fn [[indices values]]
-                    (SparseVector. 100
-                      (int-array indices)
-                      (double-array values))))))
+                      (SparseVector. 100
+                        (int-array indices)
+                        (double-array values))))))
             ppmi-rdd
             (let [ppmi-model (ppmi-fit tf-rdd)]
               (ppmi-transform-rdd ppmi-model tf-rdd))

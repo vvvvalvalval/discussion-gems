@@ -14,7 +14,8 @@
             [discussion-gems.utils.encoding :as uenc]
             [sparkling.conf :as conf]
             [sparkling.destructuring :as s-de]
-            [clojure.pprint :as pp])
+            [clojure.pprint :as pp]
+            [discussion-gems.parsing :as parsing])
   (:import (edu.stanford.nlp.pipeline StanfordCoreNLP CoreDocument CoreSentence)
            (edu.stanford.nlp.ling CoreLabel)))
 
@@ -305,17 +306,24 @@
 
 (defn enrich-comment
   [c]
-  (let [body-raw (trim-markdown (:body c))]
-    (-> c
-      (assoc :dgms_body_raw body-raw)
-      (cond->
-        (some? body-raw)
-        (assoc
-          :dgms_body_vector
-          (py/with-gil
-            (float-array
-              (let [parsed (@fr_pipeline body-raw)]
-                (py.- parsed vector)))))))))
+  (merge c
+    (when-some [md-html-forest (parsing/md->html-forest (:body c))]
+      (let [body-raw (parsing/raw-text-contents
+                       {::parsing/remove-code true
+                        ::parsing/remove-quotes true}
+                       md-html-forest)]
+        {:dgms_body_raw body-raw
+         :dgms_body_vector
+         (py/with-gil
+           (float-array
+             (let [parsed (@fr_pipeline body-raw)]
+               (py.- parsed vector))))
+         :dgms_syntax_stats_fr
+         (parsing/syntax-stats-fr body-raw)
+         :dgms_hyperlinks
+         (parsing/hyperlinks md-html-forest)
+         :dgms_n_formatting
+         (parsing/formatting-count md-html-forest)}))))
 
 (comment
 
@@ -324,19 +332,23 @@
     (mapv enrich-comment)
     time)
 
+  (->> @d_sample
+    (run! enrich-comment)
+    time)
+
   ;; Saving enriched comments
   (def d_saved-enriched
     (uspark/run-local
       (fn [cnf]
-        (conf/master cnf "local[1]"))
+        (conf/master cnf "local[4]"))
       (fn [sc]
         (->>
           (uspark/from-hadoop-text-sequence-file sc "../datasets/reddit-france/comments/RC.seqfile")
+          (spark/repartition 1000)
           (spark/map
             (fn [^String l]
               (json/read-value l json-mpr)))
           (spark/map-to-pair (fn [c] (spark/tuple "" (enrich-comment c))))
-          (spark/repartition 1000)
           (uspark/save-to-hadoop-text+fressian-seqfile
             "../derived-data/reddit-france/comments/RC-enriched_v1.seqfile")))))
 
