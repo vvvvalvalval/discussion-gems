@@ -298,7 +298,8 @@
 
   *e)
 
-(require-python '[spacy])
+(comment
+  (require-python '[spacy]))
 
 (defonce fr_pipeline
   (delay
@@ -306,7 +307,6 @@
 
 (defn enrich-comment
   [c]
-  (throw (ex-info "STOP!" {}))
   (merge c
     (when-some [md-html-forest (parsing/md->html-forest (:body c))]
       (let [body-raw (parsing/raw-text-contents

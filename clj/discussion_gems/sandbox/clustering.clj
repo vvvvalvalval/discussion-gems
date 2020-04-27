@@ -200,79 +200,7 @@
   *e)
 
 
-(defn flow-parent-value-to-children
-  [is-node? get-id get-parent-id get-value conj-value-to-child nodes-rdd]
-  (->> nodes-rdd
-    (spark/flat-map-to-pair
-      (fn [node]
-        (into [(spark/tuple
-                 (get-id node)
-                 node)]
-          (when-some [pid (get-parent-id node)]
-            (let [child-id (get-id node)]
-              [(spark/tuple pid child-id)])))))
-    (spark/group-by-key)
-    (spark/flat-map-to-pair
-      (fn [pid->vs]
-        (let [pid (s-de/key pid->vs)
-              vs (s-de/value pid->vs)
-              parent (->> vs
-                       (filter is-node?)
-                       first)]
-          (vec
-            (when (some? parent)
-              (let [v (get-value parent)]
-                (into [(spark/tuple pid parent)]
-                  (comp
-                    (remove is-node?)
-                    (distinct)
-                    (map (fn [child-id]
-                           (spark/tuple child-id v))))
-                  vs)))))))
-    (spark/reduce-by-key
-      (fn [v1 v2]
-        (if (is-node? v1)
-          (conj-value-to-child v1 v2)
-          (conj-value-to-child v2 v1))))
-    (spark/values)))
 
-
-(comment
-
-  @(uspark/run-local
-     (fn [sc]
-       (->>
-         (spark/parallelize sc
-           [{:id "a"
-             :contents #{"A"}}
-            {:id "b"
-             :contents #{"B"}}
-            {:id "ca"
-             :parent_id "a"
-             :contents #{"C"}}
-            {:id "db"
-             :parent_id "b"
-             :contents #{"D"}}
-            {:id "ec"
-             :parent_id "ca"
-             :contents #{"E"}}
-            {:id "fz"
-             :parent_id "z"
-             :contents #{"F"}}])
-         (flow-parent-value-to-children
-           map? :id :parent_id :contents
-           (fn [node parent-contents]
-             (update node :contents into parent-contents)))
-         (spark/collect) (sort-by :id) vec)))
-  =>
-  [{:id "a", :contents #{"A"}}
-   {:id "b", :contents #{"B"}}
-   {:id "ca", :parent_id "a", :contents #{"C" "A"}}
-   {:id "db", :parent_id "b", :contents #{"B" "D"}}
-   {:id "ec", :parent_id "ca", :contents #{"E" "C"}}
-   {:id "fz", :parent_id "z", :contents #{"F"}}]
-
-  *e)
 
 (defn x->xlnx
   ^double [x]
@@ -557,7 +485,7 @@
                          (->> (parsing/trim-markdown {::parsing/remove-quotes true ::parsing/remove-code true})))
                        (some-> s :selftext
                          (->> (parsing/trim-markdown {::parsing/remove-quotes true ::parsing/remove-code true})))]))))))
-          (flow-parent-value-to-children
+          (uspark/flow-parent-value-to-children
             (fn node? [v]
               (not
                 (or (nil? v) (string? v))))
@@ -584,7 +512,7 @@
 
         id->txt-contents ;; maps each id to both its contents and the contents from its parent.
         (->> data-rdd
-          (flow-parent-value-to-children
+          (uspark/flow-parent-value-to-children
             map? :name :parent_id :dgms_txt_contents
             (fn conj-parent-contents [child parent-contents]
               (update child :dgms_txt_contents into parent-contents)))

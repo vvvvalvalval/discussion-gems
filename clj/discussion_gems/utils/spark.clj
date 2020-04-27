@@ -6,7 +6,8 @@
             [sparkling.conf :as conf]
             [sparkling.function]
             [clojure.data.fressian :as fressian]
-            [discussion-gems.utils.encoding :as uenc])
+            [discussion-gems.utils.encoding :as uenc]
+            [discussion-gems.utils.misc :as u])
   (:import [org.apache.spark.api.java JavaSparkContext JavaRDD JavaRDDLike JavaPairRDD JavaDoubleRDD]
            [org.apache.spark.broadcast Broadcast]
            (scala Tuple2)
@@ -133,6 +134,17 @@
   (->> (from-hadoop-text+bytes-sequence-file sc fpath)
     (spark/map-values uenc/fressian-decode)
     (spark/values)))
+
+
+
+(defn sample-rdd-by-key
+  [key-fn p rdd]
+  (spark/filter rdd
+    (fn [x]
+      (when-some [k (key-fn x)]
+        (let [r (u/draw-random-from-string k)]
+          (< r p))))))
+
 
 
 (defn diversified-sample
@@ -319,3 +331,82 @@
     (fn read-col-in-row [^GenericRow row]
       (.get row col-idx))))
 
+
+
+;; ------------------------------------------------------------------------------
+;; Relational
+
+(defn flow-parent-value-to-children
+  ;; TODO restructure to get rid of is-node? predicate, error-prone, (Val, 27 Apr 2020)
+  [is-node? get-id get-parent-id get-value conj-value-to-child nodes-rdd]
+  (->> nodes-rdd
+    (spark/flat-map-to-pair
+      (fn [node]
+        (into [(spark/tuple
+                 (get-id node)
+                 node)]
+          (when-some [pid (get-parent-id node)]
+            (let [child-id (get-id node)]
+              [(spark/tuple pid child-id)])))))
+    (spark/group-by-key)
+    (spark/flat-map-to-pair
+      (fn [pid->vs]
+        (let [pid (s-de/key pid->vs)
+              vs (s-de/value pid->vs)
+              parent (->> vs
+                       (filter is-node?)
+                       first)]
+          (vec
+            (when (some? parent)
+              (let [v (get-value parent)]
+                (into [(spark/tuple pid parent)]
+                  (comp
+                    (remove is-node?)
+                    (distinct)
+                    (map (fn [child-id]
+                           (spark/tuple child-id v))))
+                  vs)))))))
+    (spark/reduce-by-key
+      (fn [v1 v2]
+        (if (is-node? v1)
+          (conj-value-to-child v1 v2)
+          (conj-value-to-child v2 v1))))
+    (spark/values)))
+
+
+(comment
+
+  @(run-local
+     (fn [sc]
+       (->>
+         (spark/parallelize sc
+           [{:id "a"
+             :contents #{"A"}}
+            {:id "b"
+             :contents #{"B"}}
+            {:id "ca"
+             :parent_id "a"
+             :contents #{"C"}}
+            {:id "db"
+             :parent_id "b"
+             :contents #{"D"}}
+            {:id "ec"
+             :parent_id "ca"
+             :contents #{"E"}}
+            {:id "fz"
+             :parent_id "z"
+             :contents #{"F"}}])
+         (flow-parent-value-to-children
+           map? :id :parent_id :contents
+           (fn [node parent-contents]
+             (update node :contents into parent-contents)))
+         (spark/collect) (sort-by :id) vec)))
+  =>
+  [{:id "a", :contents #{"A"}}
+   {:id "b", :contents #{"B"}}
+   {:id "ca", :parent_id "a", :contents #{"C" "A"}}
+   {:id "db", :parent_id "b", :contents #{"B" "D"}}
+   {:id "ec", :parent_id "ca", :contents #{"E" "C"}}
+   {:id "fz", :parent_id "z", :contents #{"F"}}]
+
+  *e)
