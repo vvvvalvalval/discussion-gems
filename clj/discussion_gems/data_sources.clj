@@ -22,7 +22,7 @@
 ;; ------------------------------------------------------------------------------
 ;; Moderate-sized samples (2% of content, so about 4k posts and 120k comments)
 
-(do ;; Modelerate-sized samples
+(comment ;; Modelerate-sized samples
 
   (def d_saved-comments-sample
     (uspark/run-local
