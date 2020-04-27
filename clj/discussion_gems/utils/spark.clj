@@ -101,6 +101,13 @@
     (spark/map-values uenc/fressian-encode
       rdd)))
 
+(defn save-to-hadoop-fressian-seqfile
+  [^String fpath, ^JavaRDD rdd]
+  (save-to-hadoop-text+fressian-seqfile
+    fpath
+    (spark/key-by (constantly "")
+      rdd)))
+
 
 
 (defn from-hadoop-text-sequence-file
@@ -139,11 +146,12 @@
 
 (defn sample-rdd-by-key
   [key-fn p rdd]
-  (spark/filter rdd
+  (spark/filter
     (fn [x]
       (when-some [k (key-fn x)]
         (let [r (u/draw-random-from-string k)]
-          (< r p))))))
+          (< r p))))
+    rdd))
 
 
 

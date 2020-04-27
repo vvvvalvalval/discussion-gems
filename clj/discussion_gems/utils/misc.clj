@@ -62,3 +62,9 @@
   [^doubles arr]
   (areduce arr idx s 0.
     (+ (double s) (aget arr idx))))
+
+
+(defn throw-stop!
+  "Handy for killing loops."
+  []
+  (throw (ex-info "stop!" {})))
