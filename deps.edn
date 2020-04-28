@@ -25,11 +25,27 @@
   org.apache.spark/spark-core_2.10 {:mvn/version "2.1.0"}
   org.apache.spark/spark-sql_2.10 {:mvn/version "2.1.0"}
   org.apache.spark/spark-mllib_2.10 {:mvn/version "2.1.0"}
-  io.netty/netty-all {:mvn/version "4.0.42.Final"}
   gorillalabs/sparkling {:mvn/version "2.1.3"}
   org.elasticsearch/elasticsearch-spark-20_2.10 {:mvn/version "7.0.1"}
   org.apache.lucene/lucene-core {:mvn/version "8.5.1"}
   org.apache.lucene/lucene-analyzers-common {:mvn/version "8.5.1"}
+
+  ;; deps overrides for fixing Spark bug
+  io.netty/netty-all {:mvn/version "4.0.42.Final"}
+  io.netty/netty-handler-proxy {:mvn/version "4.0.42.Final"}
+  io.netty/netty-codec-socks {:mvn/version "4.0.42.Final"}
+  io.netty/netty-codec {:mvn/version "4.0.42.Final"}
+  io.netty/netty-handler {:mvn/version "4.0.42.Final"}
+  io.netty/netty-transport {:mvn/version "4.0.42.Final"}
+  io.netty/netty-buffer {:mvn/version "4.0.42.Final"}
+  io.netty/netty-codec-http {:mvn/version "4.0.42.Final"}
+  io.netty/netty-resolver {:mvn/version "4.0.42.Final"}
+  io.netty/netty-transport-native-epoll {:mvn/version "4.0.42.Final"}
+  io.netty/netty-common {:mvn/version "4.0.42.Final"}
+  io.netty/netty-transport-native-unix-common {:mvn/version "4.0.42.Final"}
+  io.netty/netty-resolver-dns {:mvn/version "4.0.42.Final"}
+  io.netty/netty-codec-dns {:mvn/version "4.0.42.Final"}
+  
 
   org.datavec/datavec-api {:mvn/version "1.0.0-beta6"} ;; For loading word vectors
 

@@ -427,13 +427,14 @@
       (let [[_ token coords] match]
         [token
          (double-array
-           (-> coords
-             (str/split #"\s+")
-             (->>
-               (rest)
-               (into []
-                 (map (fn [^String c]
-                        (Double/parseDouble c)))))))])))
+           (repeatedly 300 rand) ;; FIXME
+           #_(-> coords
+               (str/split #"\s+")
+               (->>
+                 (rest)
+                 (into []
+                   (map (fn [^String c]
+                          (Double/parseDouble c)))))))])))
 
   (->> lines
     (drop 1)
@@ -449,6 +450,18 @@
        (conf/set cnf {"spark.driver.maxResultSize" "100g"}))
      (fn [^JavaSparkContext sc]
        (.toDebugString (.getConf (.sc sc)))))
+
+
+  (def d_repro-error
+    (uspark/run-local
+      (fn [^JavaSparkContext sc]
+        (->> (spark/parallelize sc (vec (range 1000)))
+          (spark/repartition 100)
+          (spark/map
+            (fn [i]
+              (double-array
+                (repeatedly 300 rand))))
+          (spark/collect)))))
 
   (def d_top-word-vecs
     (uspark/run-local
