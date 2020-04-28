@@ -11,7 +11,8 @@
             [manifold.deferred :as mfd]
             [clojure.data.fressian :as fressian]
             [discussion-gems.utils.misc :as u]
-            [discussion-gems.algs.spark.dimensionality-reduction :as dim-red])
+            [discussion-gems.algs.spark.dimensionality-reduction :as dim-red]
+            [discussion-gems.data-sources :as dgds])
   (:import (org.apache.spark.sql Dataset Row SparkSession RowFactory)
            (org.apache.spark.ml.feature CountVectorizer CountVectorizerModel)
            (org.apache.spark.ml.clustering LDA LDAModel KMeans)
@@ -646,13 +647,9 @@
 
 
   [(def subm-rdd
-     (->>
-       (uspark/from-hadoop-text-sequence-file sc "../datasets/reddit-france/submissions/RS.seqfile")
-       (spark/repartition 200)
-       (spark/map uenc/json-read)
+     (->> (dgds/submissions-all-rdd sc)
        (spark/filter :created_utc)
        (spark/filter created-lately?)
-       (spark/map #(parsing/backfill-reddit-name "t3_" %))
        #_
        (->>
          (spark/filter
@@ -660,10 +657,9 @@
              (-> s :name u/draw-random-from-string (< 1e-2))))
          (spark/repartition 2))))
    (def comments-rdd
-     (->> (uspark/from-hadoop-fressian-sequence-file sc "../derived-data/reddit-france/comments/RC-enriched_v1.seqfile")
+     (->> (dgds/comments-all-rdd sc)
        (spark/filter :created_utc)
        (spark/filter created-lately?)
-       (spark/map #(parsing/backfill-reddit-name "t1_" %))
        #_
        (->>
          (spark/filter

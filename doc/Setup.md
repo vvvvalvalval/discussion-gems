@@ -9,7 +9,7 @@ Launched an EC2 instance in `us-east-1` (so Virginia, should be close enough to 
 ```
 sudo apt-get update
 sudo apt-get -y install tree jq curl git-core openjdk-8-jdk maven rlwrap
-sudo apt-get -y install python3-venv python3-pip
+sudo apt-get -y install python3-venv python3-pip xdg-utils
 
 
 sudo update-alternatives --install /usr/bin/java java /usr/lib/jvm/java-8-openjdk-amd64/bin/java 1000

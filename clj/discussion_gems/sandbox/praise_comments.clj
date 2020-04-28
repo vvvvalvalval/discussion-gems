@@ -15,7 +15,9 @@
             [sparkling.conf :as conf]
             [sparkling.destructuring :as s-de]
             [clojure.pprint :as pp]
-            [discussion-gems.parsing :as parsing])
+            [discussion-gems.parsing :as parsing]
+            [discussion-gems.data-sources :as dgds]
+            [oz.core :as oz])
   (:import (edu.stanford.nlp.pipeline StanfordCoreNLP CoreDocument CoreSentence)
            (edu.stanford.nlp.ling CoreLabel)))
 
@@ -298,8 +300,7 @@
 
   *e)
 
-(comment
-  (require-python '[spacy]))
+(require-python '[spacy])
 
 (defonce fr_pipeline
   (delay
@@ -386,35 +387,49 @@
         (/ (vec-dot-product x y)
           (* nx ny))))))
 
+
+(defn phrase-vector
+  [phrase]
+  (float-array
+    (py/with-gil
+      (vec
+        (let [parsed (@fr_pipeline phrase)]
+          (py.- parsed vector))))))
+
+
+(comment ;; Experiments with words similarity
+
+  (def candidate-words
+    ["merci" "super" "excellent" "excellente" "intéressant" "intéressante"])
+
+  (def candidate-sims
+    (for [w1 candidate-words
+          w2 candidate-words]
+      (let [sim (vec-cosine-sim
+                  (phrase-vector w1)
+                  (phrase-vector w2))]
+        {:word_1 w1
+         :word_2 w2
+         :cosine_sim sim})))
+
+
+  *e)
+
+
 (comment ;; Finding comments expressing praise based on vector similarity
-
-  (def done
-    (uspark/run-local
-      (fn [sc]
-        (->> (uspark/from-hadoop-fressian-sequence-file sc "../derived-data/reddit-france/comments/RC-enriched_v1.seqfile")
-          spark/count))))
-
-  (def done
-    (uspark/run-local
-      (fn [sc]
-        (->> (uspark/from-hadoop-text+bytes-sequence-file sc "../derived-data/reddit-france/comments/RC-enriched_v0.seqfile")
-          (spark/repartition 1000)
-          (uspark/save-to-hadoop-text+bytes-seqfile "../derived-data/reddit-france/comments/RC-enriched_v1.seqfile")))))
-
-  @done
 
   (def query-sentence "merci intéressant instructif informatif clair merci appris éclairant logique merci excellent super merci beaucoup")
 
+  (def query-sentence "Je n'aurais pas dit mieux, excellente réponse.")
+  (def query-sentence "Excellente réponse intéressant merci")
+
   (def query-vec
-    (float-array
-      (vec
-        (let [parsed (@fr_pipeline query-sentence)]
-          (py.- parsed vector)))))
+    (phrase-vector query-sentence))
 
   (def d_top-similar
     (uspark/run-local
       (fn [sc]
-        (->> (uspark/from-hadoop-fressian-sequence-file sc "../derived-data/reddit-france/comments/RC-enriched_v1.seqfile")
+        (->> (dgds/comments-all-rdd sc)
           (spark/filter :dgms_body_vector)
           (spark/map-to-pair
            (fn [c]
@@ -424,6 +439,10 @@
                  (double sim)
                  (select-keys c [:id :permalink :body])))))
           (spark/sort-by-key compare false)
+          (spark/map
+            (fn [sim+c]
+              (assoc (s-de/value sim+c)
+                :vec-sim (s-de/key sim+c))))
           (spark/take 10000)
           vec))))
 
@@ -432,6 +451,33 @@
   (->> @d_top-similar
     (drop 7000)
     (take 10))
+
+  (oz/start-server! 10666)
+
+  ;; What do these most-similar comments look like?
+  (oz/view!
+    (into [:div {}]
+      (->> @d_top-similar
+        (drop (* 1000 6))
+        (take 20)
+        (map
+          (fn [c]
+            [:div
+             [:h2
+              [:code (:id c)]
+              (let [url (str "https://reddit.com" (:permalink c) "?context=8&depth=9")]
+                [:a {:href url} (:permalink c "MISSING PERMALINK")])]
+             [:div (:body c)]
+             [:div "sim = " [:strong (format "%.5f" (:vec-sim c))]]]))
+        (interpose [:hr]))))
+
+  ;; Hard to set a precise limit, bad results are mixed at every level...
+  ;; The vec-similarity is good for recall. It could be used to build a
+  ;; preliminary dataset to label, on which other features might be used for improving precision.
+  ;; we get in particular some false negative, like "Hors-Sujet".
+
+
+  ;; TODO Statistics on :vec-sim (e.g mean and std-dev)
 
   *e)
 
