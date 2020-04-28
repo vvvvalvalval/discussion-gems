@@ -32,19 +32,19 @@
 
   ;; deps overrides for fixing Spark bug
   io.netty/netty-all {:mvn/version "4.0.42.Final"}
-  io.netty/netty-handler-proxy {:mvn/version "4.0.42.Final"}
+  ;io.netty/netty-handler-proxy {:mvn/version "4.0.42.Final"}
   io.netty/netty-codec-socks {:mvn/version "4.0.42.Final"}
   io.netty/netty-codec {:mvn/version "4.0.42.Final"}
   io.netty/netty-handler {:mvn/version "4.0.42.Final"}
   io.netty/netty-transport {:mvn/version "4.0.42.Final"}
   io.netty/netty-buffer {:mvn/version "4.0.42.Final"}
   io.netty/netty-codec-http {:mvn/version "4.0.42.Final"}
-  io.netty/netty-resolver {:mvn/version "4.0.42.Final"}
+  ;io.netty/netty-resolver {:mvn/version "4.0.42.Final"}
   io.netty/netty-transport-native-epoll {:mvn/version "4.0.42.Final"}
   io.netty/netty-common {:mvn/version "4.0.42.Final"}
-  io.netty/netty-transport-native-unix-common {:mvn/version "4.0.42.Final"}
-  io.netty/netty-resolver-dns {:mvn/version "4.0.42.Final"}
-  io.netty/netty-codec-dns {:mvn/version "4.0.42.Final"}
+  ;io.netty/netty-transport-native-unix-common {:mvn/version "4.0.42.Final"}
+  ;io.netty/netty-resolver-dns {:mvn/version "4.0.42.Final"}
+  ;io.netty/netty-codec-dns {:mvn/version "4.0.42.Final"}
   
 
   org.datavec/datavec-api {:mvn/version "1.0.0-beta6"} ;; For loading word vectors
