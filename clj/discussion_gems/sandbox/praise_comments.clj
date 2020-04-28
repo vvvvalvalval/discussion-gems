@@ -306,6 +306,10 @@
   (delay
     (spacy/load "fr_core_news_md")))
 
+(defonce fr_pipeline-fasttext
+  (delay
+    (spacy/load "../models/fastttext_fr/")))
+
 (defn enrich-comment
   [c]
   (merge c
@@ -393,25 +397,49 @@
   (float-array
     (py/with-gil
       (vec
-        (let [parsed (@fr_pipeline phrase)]
+        (let [parsed (#_@fr_pipeline @fr_pipeline-fasttext phrase)]
           (py.- parsed vector))))))
 
 
-(comment ;; Experiments with words similarity
+(comment ;; Experiments with words similarity using the SpaCy word embeddings.
 
   (def candidate-words
-    ["merci" "super" "excellent" "excellente" "intéressant" "intéressante"])
+    ["merci" "super" "excellent" "excellente" "intéressant" "intéressante" "pertinent"])
 
-  (def candidate-sims
-    (for [w1 candidate-words
-          w2 candidate-words]
-      (let [sim (vec-cosine-sim
-                  (phrase-vector w1)
-                  (phrase-vector w2))]
-        {:word_1 w1
-         :word_2 w2
-         :cosine_sim sim})))
+  (def candidate-words
+    ;; That's rather disappointing: all these words have a rather low (< 0.5) similarity to each other. (Val, 28 Apr 2020)
+    ["intéressant" "instructif" "enrichissant" "mauvais" "nul" "mouais" "bof"])
 
+  (def candidate-words
+    ;; low similarity as well. (< 0.2)
+    ["réponse" "commentaire"])
+
+  (def candidate-words
+    ;; somewhat orthogonal, except that sim('réponse', 'intéressant') is rather high (~ 0.4)
+    ["réponse" "commentaire" "intéressant" "merci"])
+
+  (oz/start-server! 10666)
+
+  (oz/view!
+    (let [size (* 30 (count candidate-words))]
+      {:encoding {:x {:field "word_1", :type "nominal"}
+                  :y {:field "word_2", :type "nominal"},
+                  :size {:field "cosine_sim", :type "quantitative", :aggregate "mean"},},
+       :description "A bubble plot of the cosine similarity of various word vectors."
+       :mark "circle",
+       :$schema "https://vega.github.io/schema/vega-lite/v4.json",
+       :width size :height size
+       :data {:values
+              (for [w1 candidate-words
+                    w2 candidate-words]
+                (let [sim (vec-cosine-sim
+                            (phrase-vector w1)
+                            (phrase-vector w2))]
+                  {:word_1 w1
+                   :word_2 w2
+                   :cosine_sim sim}))}}))
+
+  ;; Much better results with Fasttext !
 
   *e)
 

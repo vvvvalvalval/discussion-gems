@@ -9,15 +9,12 @@
    {:python-executable "/Users/val/opt/anaconda3/bin/python"
     :library-path "/Users/val/opt/anaconda3/lib/libpython3.7m.dylib"}])
 
-(-> potential-paths
-  (->>
-    (filter
-      #(-> % :library-path (io/file) .exists)))
-  first
-  (or (throw (ex-info "No matching config for libpython" {})))
-  py/initialize!)
-
-(py/initialize!)
-
-(comment
-  (py/initialize!))
+(apply py/initialize!
+  (->
+    (->> potential-paths
+      (filter
+        #(-> % :library-path (io/file) .exists)))
+    first
+    (or (throw (ex-info "No matching config for libpython" {})))
+    (->>
+      (into [] cat))))
