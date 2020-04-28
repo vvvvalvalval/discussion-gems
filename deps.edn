@@ -25,6 +25,7 @@
   org.apache.spark/spark-core_2.10 {:mvn/version "2.1.0"}
   org.apache.spark/spark-sql_2.10 {:mvn/version "2.1.0"}
   org.apache.spark/spark-mllib_2.10 {:mvn/version "2.1.0"}
+  io.netty/netty-all {:mvn/version "4.0.42.Final"}
   gorillalabs/sparkling {:mvn/version "2.1.3"}
   org.elasticsearch/elasticsearch-spark-20_2.10 {:mvn/version "7.0.1"}
   org.apache.lucene/lucene-core {:mvn/version "8.5.1"}
