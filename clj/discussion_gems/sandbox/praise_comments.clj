@@ -17,11 +17,13 @@
             [clojure.pprint :as pp]
             [discussion-gems.parsing :as parsing]
             [discussion-gems.data-sources :as dgds]
-            [oz.core :as oz])
+            ; [oz.core :as oz]
+            [discussion-gems.algs.word-embeddings :as wmbed])
   (:import (edu.stanford.nlp.pipeline StanfordCoreNLP CoreDocument CoreSentence)
            (edu.stanford.nlp.ling CoreLabel)
            (org.apache.spark.ml.feature Word2Vec)
-           (org.apache.spark.api.java JavaSparkContext)))
+           (org.apache.spark.api.java JavaSparkContext)
+           (org.apache.lucene.analysis.fr FrenchAnalyzer)))
 
 (require 'sc.api)
 
@@ -312,64 +314,48 @@
   (delay
     (spacy/load "../models/fastttext_fr/")))
 
-(defn enrich-comment
-  [c]
-  (merge c
-    (when-some [md-html-forest (parsing/md->html-forest (:body c))]
-      (let [body-raw (parsing/raw-text-contents
-                       {::parsing/remove-code true
-                        ::parsing/remove-quotes true}
-                       md-html-forest)]
-        {:dgms_body_raw body-raw
-         #_#_
-         :dgms_body_vector
-         (py/with-gil
-           (float-array
-             (let [parsed (@fr_pipeline body-raw)]
-               (py.- parsed vector))))
-         :dgms_syntax_stats_fr
-         (parsing/syntax-stats-fr body-raw)
-         :dgms_hyperlinks
-         (parsing/hyperlinks md-html-forest)
-         :dgms_n_formatting
-         (parsing/formatting-count md-html-forest)}))))
 
-(comment
 
-  (-> (io/resource "reddit-france-comments-dv-sample.json")
-    (json/read-value json-mpr)
-    (->>
-      (take 10)
-      (mapv enrich-comment)))
+(defn vec-constant
+  [dim c]
+  (float-array (int dim) (float c)))
 
-  (-> (io/resource "reddit-france-comments-dv-sample.json")
-    (json/read-value json-mpr)
-    count #_
-    (->>
-      (run! enrich-comment)
-      time))
+(defn vec-scale
+  [lambda, ^floats x]
+  (let [lambda (float lambda)]
+    (amap x i ret
+      (float
+        (* lambda
+          (aget x i))))))
 
-  (/ 150470.826249 3172)
+(defn vec-add
+  ([^floats x] x)
+  ([^floats x, ^floats y]
+   (amap x i ret
+     (float
+       (+
+         (aget x i)
+         (aget y i)))))
+  ([x, y & zs]
+   (reduce
+     (fn [^floats sum, ^floats z]
+       (areduce z i acc nil
+         (do
+           (aset sum i
+             (+
+               (aget sum i)
+               (aget z i)))
+           nil))
+       sum)
+     (vec-add x y)
+     zs)))
 
-  ;; Saving enriched comments
-  (def d_saved-enriched
-    (uspark/run-local
-      (fn [cnf]
-        (conf/master cnf "local[4]"))
-      (fn [sc]
-        (->>
-          (uspark/from-hadoop-fressian-sequence-file sc "../derived-data/reddit-france/comments/RC-enriched_v1.seqfile")
-          #_#_#_
-          (uspark/from-hadoop-text-sequence-file sc "../datasets/reddit-france/comments/RC.seqfile") ;; FIXME
-          (spark/repartition 1000) ;; FIXME
-          (spark/map
-            (fn [^String l]
-              (json/read-value l json-mpr)))
-          (spark/map-to-pair (fn [c] (spark/tuple "" (enrich-comment c))))
-          (uspark/save-to-hadoop-text+fressian-seqfile
-            "../derived-data/reddit-france/comments/RC-enriched_v2.seqfile")))))
+(defn vec-mean
+  [vs]
+  (vec-scale
+    (/ 1. (count vs))
+    (apply vec-add vs)))
 
-  *e)
 
 (defn vec-dot-product
   [^floats x, ^floats y]
@@ -463,6 +449,225 @@
                 (repeatedly 300 rand))))
           (spark/collect)))))
 
+
+  (require 'discussion-gems.algs.word-embeddings)
+
+  (defn word->token [w]
+    (let [fr-an (FrenchAnalyzer.)
+          tokens #_ (parsing/lucene-tokenize fr-an w) (parsing/split-words-fr w)]
+      (when (= 1 (count tokens))
+        (str/lower-case (first tokens)))))
+
+  (def w2vec-index
+    (discussion-gems.algs.word-embeddings/load-word-embedding-index
+      word->token
+      100000
+      (io/file "../models/fastText_cc.fr.300.vec.txt")))
+
+  (wmbed/word-embedding-dim w2vec-index)
+  => 300
+
+  (count
+    (wmbed/all-word-vectors w2vec-index))
+  => 51715
+
+  (->> ["merci"
+        "intéressant"
+        "intéressante"
+        "enrichissant"
+        "enrichissante"
+        "instructif"
+        "instructive"
+        "pertinent"
+        "pertinente"
+        "super"
+        "commentaire"
+        "réponse"]
+    (mapv
+      (fn [w]
+        (let [token (word->token w)]
+          [w
+           token
+           (into []
+             (take 10)
+             (wmbed/token-vector w2vec-index token))]))))
+  =>
+  [["merci" [0.0821 0.11 -0.0205 0.0075 -0.0736 -0.0273 -0.1809 -0.0244 -0.0528 -0.031]]
+   ["intéressant" [0.0416 0.0013 -0.0048 0.0033 -0.0592 0.0024 -0.0049 -0.0396 0.0281 -0.0047]]
+   ["intéressante" [0.0354 0.0255 -0.0177 0.0032 -0.0309 0.0159 -0.0161 0.0029 0.0046 0.0068]]
+   ["enrichissant" [-0.0019 0.0083 -0.0161 0.0051 -0.0345 0.0066 -0.0128 -0.0393 0.0513 0.0051]]
+   ["enrichissante" [0.0123 0.028 -0.0378 0.0044 -0.0127 0.0454 -0.025 -0.0214 0.0184 0.0193]]
+   ["instructif" [0.0539 0.0145 -0.0091 -0.025 -0.1017 -0.0021 -0.0276 -0.0548 0.0495 0.0046]]
+   ["instructive" [0.0293 0.0408 -0.0621 -0.0147 -0.0523 0.0199 -0.0489 -0.0183 0.0097 0.0116]]
+   ["pertinent" [0.0548 0.0325 0.0056 -0.0229 -0.0621 -0.0312 0.0224 -0.0326 -0.0032 -0.0195]]
+   ["pertinente" [0.0558 0.0311 -0.0061 -0.008 -0.0166 -0.0103 -0.0055 0.0168 -0.0109 -0.0012]]
+   ["super" [0.0292 0.0092 -0.0054 0.0505 -0.0795 0.0197 -0.097 -0.025 0.0139 -0.029]]
+   ["commentaire" [0.0377 0.0043 0.0038 -0.023 -0.0574 -0.0319 0.003 -0.0029 0.0055 -0.0207]]
+   ["réponse" [0.0451 0.0286 0.0058 -0.0031 -0.079 -0.0332 -0.0167 0.0547 -0.0379 -0.0238]]]
+
+  (->> (wmbed/all-word-vectors w2vec-index)
+    (take-last 20)
+    (map first)
+    vec)
+  =>
+  ["interrompent"
+   "bygmalion"
+   "écrirai"
+   "firebird"
+   "fotolia"
+   "plyd"
+   "wacken"
+   "sympathise"
+   "stout"
+   "mistress"
+   "écuyers"
+   "hortensias"
+   "lac-mégantic"
+   "10.3.1"
+   "titicaca"
+   "1985-1987"
+   "åsa"
+   "hool"
+   "permien"
+   "dédouanement"]
+
+  *e
+
+
+  (let [fr-an (FrenchAnalyzer.)]
+    (defn phrase-vector
+      [phrase]
+      (let [words #_(parsing/lucene-tokenize fr-an phrase)
+            (parsing/split-words-fr phrase)
+            vs (into []
+                 (comp
+                   (map #(wmbed/token-vector w2vec-index %))
+                   (remove nil?))
+                 words)]
+        (if (empty? vs)
+          (vec-constant (wmbed/word-embedding-dim w2vec-index) 0.)
+          (vec-mean vs)))))
+
+
+  (vec (phrase-vector "Salut, comment ça va ?"))
+
+  (vec-cosine-sim
+    (phrase-vector "Merci, commentaire très intéressant")
+    (phrase-vector "Excellente réponse, très instructif, merci!"))
+  => 0.9615951756358582
+
+
+  (->> ["merci"
+        "intéressant"
+        "réponse"
+        "instructif"
+        "clair"
+        "enrichissant"
+        "argumentation"
+        "appris"]
+    (mapv
+      (fn [w]
+        [w
+         (->> (let [v (phrase-vector w)]
+                (->> (wmbed/all-word-vectors w2vec-index)
+                  (map (fn [[t v1]]
+                         [t (vec-cosine-sim v v1)]))
+                  (sort-by second u/decreasing)
+                  (take 10)
+                  vec)))])))
+  => [["merci"
+       [["merci" 1.0]
+        ["merçi" 0.7197452389210423]
+        ["remercie" 0.7018062461404105]
+        ["cordialement" 0.6846948168718985]
+        ["bravo" 0.6583419928105246]
+        ["amicalement" 0.618912344961201]
+        ["bonsoir" 0.6078570840464568]
+        ["mercis" 0.5963541923757397]
+        ["remercions" 0.5905738466603473]
+        ["thanks" 0.5873522240873501]]]
+      ["intéressant"
+       [["intéressant" 1.0]
+        ["interessant" 0.8100424438815987]
+        ["interressant" 0.7675213543351272]
+        ["passionnant" 0.7433083488019439]
+        ["instructif" 0.7411347797036214]
+        ["surprenant" 0.7359688960103521]
+        ["pertinent" 0.7316754070617438]
+        ["étonnant" 0.7268369222227201]
+        ["inintéressant" 0.7223491493966553]
+        ["intéressante" 0.7104026640336902]]]
+      ["réponse"
+       [["réponse" 1.0]
+        ["reponse" 0.695438223633912]
+        ["question" 0.6605799937361818]
+        ["réaction" 0.6448893095562976]
+        ["réponses" 0.6260997513146652]
+        ["explication" 0.6170074156131033]
+        ["répondre" 0.5943466696281132]
+        ["proposition" 0.5754551139628795]
+        ["interrogation" 0.5690442250932481]
+        ["solution" 0.5590259446747962]]]
+      ["instructif"
+       [["instructif" 1.0000000000000002]
+        ["intéressant" 0.7411347797036214]
+        ["passionnant" 0.6984023574161665]
+        ["instructive" 0.6817846654849143]
+        ["interessant" 0.6723405589293528]
+        ["amusant" 0.6719158992131845]
+        ["interressant" 0.6604542224986327]
+        ["édifiant" 0.6492921248397421]
+        ["captivant" 0.6334360556546719]
+        ["rigolo" 0.6231030072799405]]]
+      ["clair"
+       [["clair" 1.0]
+        ["claire" 0.6834284913846507]
+        ["limpide" 0.666397767222623]
+        ["clairs" 0.6480367160217376]
+        ["évident" 0.6434270396763709]
+        ["cohérent" 0.6241448691284996]
+        ["compréhensible" 0.6097672094470212]
+        ["concis" 0.6028653753880525]
+        ["précis" 0.5956219828281515]
+        ["foncé" 0.5935130772099656]]]
+      ["enrichissant"
+       [["enrichissant" 1.0]
+        ["enrichissante" 0.6582632954377973]
+        ["passionnant" 0.6439767856223527]
+        ["intéressant" 0.6437430789101131]
+        ["instructif" 0.609841003286072]
+        ["enrichir" 0.6003646399292021]
+        ["stimulant" 0.5904206658974794]
+        ["amusant" 0.5867145251719821]
+        ["enrichi" 0.5831775924289098]
+        ["diversifié" 0.5648453559721599]]]
+      ["argumentation"
+       [["argumentation" 1.0]
+        ["argumentaire" 0.7927708869687893]
+        ["argument" 0.6865057092100127]
+        ["argumenter" 0.6857461973517498]
+        ["arguments" 0.6832215406843153]
+        ["affirmation" 0.6565223423897693]
+        ["raisonnement" 0.6490385402680342]
+        ["argumentée" 0.6348719913943234]
+        ["argumente" 0.6330139772063036]
+        ["argumentaires" 0.632702517529565]]]
+      ["appris"
+       [["appris" 0.9999999999999999]
+        ["apprit" 0.7460024881417349]
+        ["apprend" 0.7439662406782903]
+        ["apprends" 0.7281571092226191]
+        ["apprenait" 0.7223301362232414]
+        ["apprendre" 0.7007330536264299]
+        ["parlé" 0.6771818348551145]
+        ["apprise" 0.6705651600246961]
+        ["apprendra" 0.6624189839535904]
+        ["apprennent" 0.6589559226468569]]]]
+
+
+
+
+
   (def d_top-word-vecs
     (uspark/run-local
       (fn [cnf]
@@ -500,7 +705,7 @@
                 (spark/tuple i [t v]))))
           (spark/sort-by-key)
           (spark/values)
-          (spark/take 512)))))
+          (spark/take 50000)))))
 
 
   *e)
@@ -545,6 +750,10 @@
 
   ;; Much better results with Fasttext !
 
+
+
+
+
   *e)
 
 
@@ -552,7 +761,10 @@
 
   (def query-sentence "merci intéressant instructif informatif clair merci appris éclairant logique merci excellent super merci beaucoup")
 
+  (def query-sentence "Merci intéressant réponse explication")
+
   (def query-sentence "Je n'aurais pas dit mieux, excellente réponse.")
+
   (def query-sentence "Excellente réponse intéressant merci")
 
   (def query-vec
@@ -564,12 +776,15 @@
         (->> (dgds/comments-all-rdd sc)
           (spark/filter :dgms_body_vector)
           (spark/map-to-pair
-           (fn [c]
-             (let [doc-vec (:dgms_body_vector c)
-                   sim (vec-cosine-sim query-vec doc-vec)]
-               (spark/tuple
-                 (double sim)
-                 (select-keys c [:id :permalink :body])))))
+            (fn [c]
+              (let [doc-vec #_(:dgms_body_vector c) ;; FIXME trying with new vectorization
+                    (phrase-vector
+                      (:dgms_body_raw c))
+                    sim (vec-cosine-sim query-vec doc-vec)]
+                (spark/tuple
+                  (double sim)
+                  (select-keys c [:id :permalink :body])))))
+          (spark/storage-level! (:memory-and-disk spark/STORAGE-LEVELS))
           (spark/sort-by-key compare false)
           (spark/map
             (fn [sim+c]
@@ -581,8 +796,22 @@
   (count @d_top-similar)
 
   (->> @d_top-similar
-    (drop 7000)
+    (drop (* 1000 7))
     (take 10))
+
+  (->> ["merci" "intéressant" "clair" "réponse" "commentaire"]
+    (mapv (fn [w]
+            [w (vec-norm2 (phrase-vector w))])))
+  =>
+  [["merci" 0.9933003364258997]
+   ["intéressant" 0.3856747799760718]
+   ["clair" 0.8740489912425657]
+   ["réponse" 0.6559320385260636]
+   ["commentaire" 0.404852807851022]]
+  ;; TODO interesting, we see that 'merci' might get an unfair weight here (Val, 28 Apr 2020)
+
+  (vec-norm2 (phrase-vector "merci"))
+  (vec-norm2 (phrase-vector "intéressant"))
 
   (oz/start-server! 10666)
 
@@ -610,6 +839,9 @@
 
 
   ;; TODO Statistics on :vec-sim (e.g mean and std-dev)
+
+
+
 
   *e)
 

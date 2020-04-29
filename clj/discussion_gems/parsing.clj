@@ -26,6 +26,12 @@
   (require '[discussion-gems.utils.encoding :as uenc])
   (require '[clojure.java.io :as io])
 
+
+  (markdown.core/md-to-html-string
+    "> Ceci est une citation
+
+Ceci n'est pas une citation.")
+
   (->>
     (uenc/json-read
       (io/resource "reddit-france-comments-dv-sample.json"))
@@ -195,7 +201,9 @@
     nil
     (get-in
       (crouton.html/parse-string
-        (markdown.core/md-to-html-string md-txt))
+        (markdown.core/md-to-html-string
+          (str/replace md-txt
+            "&gt;" ">")))
       [:content 1 :content])))
 
 
@@ -216,6 +224,11 @@
 
              (:p)
              (when-not (and remove-quotes? (quote-paragraph? node))
+               (run! aux (:content node))
+               (.append sb "\n\n"))
+
+             (:blockquote)
+             (when-not remove-quotes?
                (run! aux (:content node))
                (.append sb "\n\n"))
 

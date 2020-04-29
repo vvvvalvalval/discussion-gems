@@ -7,7 +7,7 @@
 (defn comments-all-rdd
   [sc]
   (->>
-    (uspark/from-hadoop-fressian-sequence-file sc "../derived-data/reddit-france/comments/RC-enriched_v2.seqfile")
+    (uspark/from-hadoop-fressian-sequence-file sc "../derived-data/reddit-france/comments/RC-enriched_v3.seqfile")
     (spark/map #(parsing/backfill-reddit-name "t1_" %))))
 
 (defn submissions-all-rdd
@@ -22,7 +22,7 @@
 ;; Moderate-sized samples (2% of content, so about 4k posts and 120k comments)
 
 (def seqfile-comments-md
-  "../derived-data/reddit-france/comments/RC-enriched_v2_sample1e-2.seqfile")
+  "../derived-data/reddit-france/comments/RC-enriched_v3_sample1e-2.seqfile")
 
 (def seqfile-subm-md
   "../derived-data/reddit-france/submissions/RS_sample1e-2.seqfile")

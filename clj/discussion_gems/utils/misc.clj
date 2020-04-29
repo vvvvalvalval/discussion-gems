@@ -30,6 +30,21 @@
       coll)))
 
 
+(defn take-first-and-last
+  "Returns the first `n-first` and the last `n-last` elements of `coll` in a single list,
+  making sure there's no overlap."
+  [n-first n-last coll]
+  (let [n (count coll)
+        m (+ n-first n-last)]
+    (if (< m n)
+      (concat
+        (take n-first coll)
+        (take-last n-last coll))
+      coll)))
+
+
+
+
 (defn as-java-props
   ^Properties [m]
   (reduce-kv
@@ -42,6 +57,7 @@
     m))
 
 
+;; TODO use MurMur3 or some stable hash implementation for reproducibility (Val, 29 Apr 2020)
 (defn draw-random-from-string
   "Pseudo-randomly draws a number in uniformly [0;1) from a String input, typically an id."
   [^String id-str]
@@ -51,6 +67,29 @@
         (long Integer/MAX_VALUE)
         (-> id-str hash long))
       (-' (long Integer/MAX_VALUE) (long Integer/MIN_VALUE)))))
+
+(defn draw-n-by
+  [rand-fn n coll]
+  (->> coll
+    (mapv
+      (fn [e]
+        [(rand-fn e) e]))
+    (sort-by first)
+    (into []
+      (comp
+        (take n)
+        (map second)))))
+
+(comment
+
+  (draw-n-by
+    draw-random-from-string
+    2
+    ["bonjour" "comment" "allez" "vous" "ce" "soir"])
+  => ["allez" "comment"]
+
+  *e)
+
 
 (defn decreasing
   [x y]
