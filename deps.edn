@@ -6,11 +6,13 @@
   org.clojure/core.async {:mvn/version "0.3.442"}
   manifold {:mvn/version "0.1.8"}
 
+  ;; Data encoding
   org.apache.commons/commons-compress {:mvn/version "1.18"}
   org.clojure/data.fressian {:mvn/version "0.2.1"}
   metosin/jsonista {:mvn/version "0.2.5"}
   ;io.airlift/aircompressor {:mvn/version "0.16"}
 
+  ;; Markdown parsing
   crouton {:mvn/version "0.1.2"} ;; HTML parsing library for Clojure - https://github.com/weavejester/crouton
   markdown-clj {:mvn/version "1.10.2"} ;; Markdown parser in Clojure - https://github.com/yogthos/markdown-clj
 
@@ -20,30 +22,44 @@
 
   buddy/buddy-core {:mvn/version "1.6.0"}
 
+  ;; Spark
   org.apache.hadoop/hadoop-client {:mvn/version "2.9.0"}
   com.fasterxml.jackson.core/jackson-databind {:mvn/version "2.6.5"} ;; Because Spark 2.11 wants that
   org.apache.spark/spark-core_2.10 {:mvn/version "2.1.0"}
   org.apache.spark/spark-sql_2.10 {:mvn/version "2.1.0"}
   org.apache.spark/spark-mllib_2.10 {:mvn/version "2.1.0"}
   gorillalabs/sparkling {:mvn/version "2.1.3"}
-  org.elasticsearch/elasticsearch-spark-20_2.10 {:mvn/version "7.0.1"}
-  org.apache.lucene/lucene-core {:mvn/version "8.5.1"}
-  org.apache.lucene/lucene-analyzers-common {:mvn/version "8.5.1"}
-  
 
-  org.datavec/datavec-api {:mvn/version "1.0.0-beta6"} ;; For loading word vectors
 
+  ;; Scientific computing
   net.mikera/core.matrix {:mvn/version "0.62.0"}
   net.mikera/vectorz-clj {:mvn/version "0.48.0"}
 
+  ;; Dataviz
   metasoarous/oz {:mvn/version "1.6.0-alpha6"}
 
+  ;; NLP
   edu.stanford.nlp/stanford-corenlp {:mvn/version "3.9.2"}
   edu.stanford.nlp/stanford-corenlp-models-french {:local/root "./models/stanford-french-corenlp-2018-10-05-models.jar"} ;; NOTE obtained by wget https://nlp.stanford.edu/software/stanford-french-corenlp-2018-10-05-models.jar
   lambdaisland/regal {:git/url "https://github.com/lambdaisland/regal.git" :sha "b059fdb06d5586a9a04c27e7b011c467ad8546db"}
+  org.elasticsearch/elasticsearch-spark-20_2.10 {:mvn/version "7.0.1"}
+  org.apache.lucene/lucene-core {:mvn/version "8.5.1"}
+  org.apache.lucene/lucene-analyzers-common {:mvn/version "8.5.1"}
 
+  ;; Interop with Python
   clj-python/libpython-clj {:mvn/version "1.38"}
 
+  ;; SQL and SQLite
+  seancorfield/next.jdbc {:mvn/version "1.0.424"}
+  org.xerial/sqlite-jdbc {:mvn/version "3.30.1"}
+
+  ;; HTTP server
+  aleph {:mvn/version "0.4.6"} ;; HTTP server implementation
+  ring/ring-core {:mvn/version "1.8.0"} ;; Handling abstraction
+  metosin/muuntaja {:mvn/version "0.6.6"} ;; Content negociation
+  ring-cors {:mvn/version "0.1.13"} ;; CORS
+
+  ;; HTTP client
   clj-http {:mvn/version "3.9.1"}}
 
 
@@ -57,6 +73,15 @@
   :nREPL ;; Enables you to run a remote Clojure REPL via nREPL.
   {:extra-deps
    {nrepl/nrepl {:mvn/version "0.6.0"}}}
+
+  :lab-ui
+  {:extra-paths ["lab-ui/src"]
+   :extra-deps
+   {thheller/shadow-cljs {:mvn/version "2.8.109"}
+    org.clojure/clojurescript {:mvn/version "1.10.748"}
+    rum {:mvn/version "0.11.5"}
+    cljs-http {:mvn/version "0.1.46"}
+    cljsjs/react {:mvn/version "16.13.1-0"}}}
 
   :older-netty
   {;; deps overrides for fixing Spark bug - see https://issues.apache.org/jira/browse/SPARK-21143

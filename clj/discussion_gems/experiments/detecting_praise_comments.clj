@@ -27,10 +27,12 @@
             [discussion-gems.utils.spark :as uspark]
             [discussion-gems.utils.encoding :as uenc]
             [clojure.data.fressian :as fressian]
-            [sparkling.destructuring :as s-de])
+            [sparkling.destructuring :as s-de]
+            [manifold.deferred :as mfd]
+            [discussion-gems.training.db :as trn-db])
   (:import (edu.stanford.nlp.pipeline StanfordCoreNLP CoreSentence CoreDocument)
            (edu.stanford.nlp.ling CoreLabel)
-           (java.util.zip GZIPOutputStream)))
+           (java.util.zip GZIPOutputStream GZIPInputStream)))
 
 
 ;; ------------------------------------------------------------------------------
@@ -103,10 +105,9 @@
   [^CoreSentence sntc]
   (into []
     (keep
-      (let [stop-words parsing-fr/lucene-french-stopwords]
-        (fn [^CoreLabel tkn]
-          (-> (.value tkn)
-            normalize-term))))
+      (fn [^CoreLabel tkn]
+        (normalize-term
+          (.value tkn))))
     (.tokens sntc)))
 
 (comment
@@ -137,18 +138,20 @@
 (defn doc-vector
   "Vectorizes human text as the normalized sum of its individual term vectors."
   [body-raw]
-  (let [doc (doto
+  (let [w2vec @d_w2vec
+        doc (doto
               (CoreDocument. ^String body-raw)
               (->> (.annotate @nlp-pipeline)))
         sntcs (u/take-first-and-last
-                ;; NOTE Praise is usually located at the very beginning or end of the praising comment, so we only vectorize the beginning and ending sentences. (Val, 29 Apr 2020)
+                ;; NOTE Why vectorize only the leading and ending sentences?
+                ;; The id is that praise is usually located at the very beginning or end of the praising comment. (Val, 29 Apr 2020)
                 2 2
                 (.sentences doc))
         token-vectors
         (into []
           (comp
             (mapcat phrase-tokens)
-            (keep #(wmbed/token-vector @d_w2vec %)))
+            (keep #(wmbed/token-vector w2vec %)))
           sntcs)]
     (if (empty? token-vectors)
       nil
@@ -171,9 +174,22 @@
                         (:body c)))
                     (doc-vector))]
         (apply max
+          ;; NOTE why the max of the similarity scores, rather than e.g the sum or geometric mean? (Val, 30 Apr 2020)
+          ;; The goal is to have a rather high recall, that's why the max is preferred.
           (map #(ulinalg/vec-cosine-sim % v)
             @d_praise-sentence-vectors))
         -1.))))
+
+(comment
+
+  (->>
+    (uenc/json-read
+      (io/resource "reddit-france-comments-dv-sample.json"))
+    (map #'comment-pre-sim-score)
+    (take 10))
+
+
+  *e)
 
 (defn select-dataset-to-label
   [sc]
@@ -204,6 +220,9 @@
           ordinary-comments)))))
 
 
+(def dataset-to-label-path
+  "../detecting-praise-comments_dataset_v0.fressian.gz")
+
 (comment ;; Saving the sampled comments to a file
 
   (def d_selected-comments
@@ -211,16 +230,52 @@
       (fn [sc]
         (select-dataset-to-label sc))))
 
-  (with-open [wtr
-              (uenc/fressian-writer
-                (GZIPOutputStream.
-                  (io/output-stream "../detecting-praise-comments_dataset_v0.fressian")))]
-    (fressian/write-object wtr @d_selected-comments))
+  (def d_saved
+    (mfd/chain d_selected-comments
+      (fn [_]
+        (with-open [wtr
+                    (uenc/fressian-writer
+                      (GZIPOutputStream.
+                        (io/output-stream dataset-to-label-path)))]
+          (fressian/write-object wtr @d_selected-comments)))))
 
+  (->> @d_selected-comments count)
+  => 10058
+
+
+  (->> @d_selected-comments
+    (shuffle)
+    (take 10)
+    (map :dgms_body_raw))
 
   *e)
 
 
+(def d_dataset-to-label
+  (delay
+    (with-open [rdr (uenc/fressian-reader
+                      (GZIPInputStream.
+                        (io/input-stream
+                          dataset-to-label-path)))]
+      (fressian/read-object rdr))))
 
 
+(def dataset-id
+  "discussion-gems.experiments.detecting-praise-comments--label")
 
+(defn next-comment-to-label
+  []
+  (loop []
+    (let [c (rand-nth @d_dataset-to-label)]
+      (if (trn-db/already-labeled? dataset-id (:name c))
+        (recur)
+        (-> c
+          ;; NOTE keeping this might cause serialization issues. (Val, 30 Apr 2020)
+          (dissoc :dgms_body_vector))))))
+
+(defn save-comment-label!
+  [c-name lbl]
+  (trn-db/save-label!
+    dataset-id c-name
+    nil
+    (double lbl)))

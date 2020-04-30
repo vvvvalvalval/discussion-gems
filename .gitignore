@@ -3,3 +3,9 @@ models/*
 !models/.gitkeep
 .nrepl-port
 discussion_gems_py/__pycache__
+
+resources/unversioned
+.shadow-cljs
+
+node_modules
+lab-ui/assets/app/js

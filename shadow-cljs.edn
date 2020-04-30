@@ -1,0 +1,9 @@
+{:deps {:aliases [:lab-ui]}
+ :dev-http {8080 "lab-ui/assets/app"}
+ :builds
+ {:lab-ui-app
+  {:target :browser
+   :output-dir "lab-ui/assets/app/js"
+   :asset-path "/assets/app/js"
+   :modules {:main {:entries [discussion-gems.lab-ui.welcome]
+                    :init-fn discussion-gems.lab-ui.welcome/main}}}}}
