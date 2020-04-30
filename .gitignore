@@ -4,7 +4,8 @@ models/*
 .nrepl-port
 discussion_gems_py/__pycache__
 
-resources/unversioned
+resources/unversioned/*
+!resources/unversioned/.gitkeep
 .shadow-cljs
 
 node_modules
