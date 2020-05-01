@@ -208,20 +208,44 @@
           ordinary-comments
           (->> comments-rdd
             (spark/sample false (/ 5e3 n-comments) 75701441)
-            (spark/collect))]
-      (vec
-        (concat
-          (->> high-sim-comments
-            (take 5000)
-            (u/draw-n-by rand-from-comment 2000))
-          (->> high-sim-comments
-            (drop 5000)
-            (u/draw-n-by rand-from-comment 3000))
-          ordinary-comments)))))
+            (spark/collect))
+          selected-comments
+          (vec
+            (concat
+              (->> high-sim-comments
+                (take 5000)
+                (u/draw-n-by rand-from-comment 2000))
+              (->> high-sim-comments
+                (drop 5000)
+                (u/draw-n-by rand-from-comment 3000))
+              ordinary-comments))
+          selected-parent-ids--bv
+          (uspark/broadcast-var sc
+            (into #{}
+              (keep :parent_id)
+              selected-comments))
+          name->parent-comment
+          (->> comments-rdd
+            ;; NOTE we're ignoring the cases when the parent is a post. That should be rare enough. (Val, 01 May 2020)
+            (spark/filter
+              (fn parent-of-selected? [pc]
+                (contains?
+                  (uspark/broadcast-value selected-parent-ids--bv)
+                  (:name pc))))
+            (spark/collect)
+            (u/index-and-map-by :name identity))]
+      (->> selected-comments
+        (mapv
+          (fn add-parent [c]
+            (merge c
+              (when-some [pc (get name->parent-comment
+                               (:parent_id c))]
+                {:dgms_comment_parent pc}))))))))
+
 
 
 (def dataset-to-label-path
-  "../detecting-praise-comments_dataset_v0.fressian.gz")
+  "resources/detecting-praise-comments_dataset_v0.fressian.gz")
 
 (comment ;; Saving the sampled comments to a file
 
@@ -236,8 +260,10 @@
         (with-open [wtr
                     (uenc/fressian-writer
                       (GZIPOutputStream.
-                        (io/output-stream dataset-to-label-path)))]
+                        (io/output-stream
+                          dataset-to-label-path)))]
           (fressian/write-object wtr @d_selected-comments)))))
+
 
   (->> @d_selected-comments count)
   => 10058
@@ -249,6 +275,8 @@
     (map :dgms_body_raw))
 
   *e)
+
+
 
 
 (def d_dataset-to-label
@@ -263,19 +291,59 @@
 (def dataset-id
   "discussion-gems.experiments.detecting-praise-comments--label")
 
+
+
+(defn comment-body-as-hiccup
+  "Parses a markdown text and rewrites it to a Hiccup data structure,
+  ready to be rendered by the Labelling UI."
+  [body-md]
+  (letfn [(to-hiccup [node]
+            (if (map? node)
+              (into [(:tag node)
+                     (merge
+                       (case (:tag node)
+                         :blockquote {:class "dgms-reddit-quote"}
+                         {})
+                       (:attrs node))]
+                (map to-hiccup)
+                (:content node))
+              node))]
+    (-> body-md
+      (parsing/md->html-forest)
+      (as-> nodes
+        {:tag :div
+         :attrs {:class "dgms-reddit-body"}
+         :content nodes})
+      (to-hiccup))))
+
+(defn prepare-comment-for-labelling-ui
+  [c]
+  (-> c
+    (assoc
+      :dgms_body__hiccup
+      (comment-body-as-hiccup (:body c "")))
+    ;; NOTE keeping this might cause serialization issues. (Val, 30 Apr 2020)
+    (dissoc :dgms_body_vector)))
+
 (defn next-comment-to-label
   []
   (loop []
     (let [c (rand-nth @d_dataset-to-label)]
       (if (trn-db/already-labeled? dataset-id (:name c))
         (recur)
-        (-> c
-          ;; NOTE keeping this might cause serialization issues. (Val, 30 Apr 2020)
-          (dissoc :dgms_body_vector))))))
+        (prepare-comment-for-labelling-ui c)))))
 
 (defn save-comment-label!
-  [c-name lbl]
+  [c-name c lbl]
   (trn-db/save-label!
     dataset-id c-name
-    nil
+    c
     (double lbl)))
+
+(comment
+
+  (next-comment-to-label)
+
+  (trn-db/all-labels! dataset-id)
+
+  *e)

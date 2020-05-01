@@ -43,6 +43,18 @@
       coll)))
 
 
+(defn rename-keys
+  [m oldk->newk]
+  (reduce
+    (fn [ret [oldk newk]]
+      (if (contains? ret oldk)
+        (-> ret
+          (assoc newk (get ret oldk))
+          (dissoc oldk))
+        ret))
+    m
+    oldk->newk))
+
 
 
 (defn as-java-props

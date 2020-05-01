@@ -4,7 +4,7 @@
             [jsonista.core :as json]
             [discussion-gems.utils.spark :as uspark]
             [sparkling.conf :as conf]
-            [discussion-gems.feature-engineering.post-to-comment]
+            [discussion-gems.feature-engineering.comments-graph]
             [discussion-gems.data-sources :as dgds]
             [sparkling.core :as spark]))
 
@@ -62,9 +62,9 @@
       (fn [sc]
         (->>
           (uspark/from-hadoop-fressian-sequence-file sc "../derived-data/reddit-france/comments/RC-enriched_v2.seqfile")
-          (discussion-gems.feature-engineering.post-to-comment/enrich-comments-with-subm-data
+          (discussion-gems.feature-engineering.comments-graph/enrich-comments-with-subm-data
             :dgms_comment_submission
-            #(discussion-gems.feature-engineering.post-to-comment/basic-submission-data %)
+            #(discussion-gems.feature-engineering.comments-graph/basic-submission-data %)
             (dgds/submissions-all-rdd sc))
           (uspark/save-to-hadoop-fressian-seqfile
             "../derived-data/reddit-france/comments/RC-enriched_v3.seqfile")))))

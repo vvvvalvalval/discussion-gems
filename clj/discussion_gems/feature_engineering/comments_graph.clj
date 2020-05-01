@@ -1,4 +1,4 @@
-(ns discussion-gems.feature-engineering.post-to-comment
+(ns discussion-gems.feature-engineering.comments-graph
   (:require [discussion-gems.utils.spark :as uspark]
             [discussion-gems.data-sources :as dgds]
             [sparkling.core :as spark]

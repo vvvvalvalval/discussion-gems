@@ -81,7 +81,8 @@
     org.clojure/clojurescript {:mvn/version "1.10.748"}
     rum {:mvn/version "0.11.5"}
     cljs-http {:mvn/version "0.1.46"}
-    cljsjs/react {:mvn/version "16.13.1-0"}}}
+    cljsjs/react {:mvn/version "16.13.1-0"}
+    funcool/promesa {:mvn/version "5.1.0"}}}
 
   :older-netty
   {;; deps overrides for fixing Spark bug - see https://issues.apache.org/jira/browse/SPARK-21143
