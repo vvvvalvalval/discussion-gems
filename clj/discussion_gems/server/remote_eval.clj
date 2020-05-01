@@ -44,10 +44,9 @@
 
 (defn base-handler
   [req]
-  (sc.api/spy
-    {:status 200
-     :body
-     {:result (eval-from-req (:body-params req))}}))
+  {:status 200
+   :body
+   {:result (eval-from-req (:body-params req))}})
 
 
 (def handler

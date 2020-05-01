@@ -29,7 +29,8 @@
             [clojure.data.fressian :as fressian]
             [sparkling.destructuring :as s-de]
             [manifold.deferred :as mfd]
-            [discussion-gems.training.db :as trn-db])
+            [discussion-gems.training.db :as trn-db]
+            [vvvvalvalval.supdate.api :as supd])
   (:import (edu.stanford.nlp.pipeline StanfordCoreNLP CoreSentence CoreDocument)
            (edu.stanford.nlp.ling CoreLabel)
            (java.util.zip GZIPOutputStream GZIPInputStream)))
@@ -46,6 +47,8 @@
 ;;
 ;; We want that similarity measure to have high recall: that's why we make use of cosine similarity
 ;; on word embeddings.
+;;
+;; TODO: relate this approach to concepts and techniques of Relevance Feedback / Active Learning.
 
 
 (def r-france-sociopolitical-flairs
@@ -254,6 +257,11 @@
       (fn [sc]
         (select-dataset-to-label sc))))
 
+  (->> @d_selected-comments count)
+  => 10058
+
+  (rand-nth @d_selected-comments)
+
   (def d_saved
     (mfd/chain d_selected-comments
       (fn [_]
@@ -264,9 +272,6 @@
                           dataset-to-label-path)))]
           (fressian/write-object wtr @d_selected-comments)))))
 
-
-  (->> @d_selected-comments count)
-  => 10058
 
 
   (->> @d_selected-comments
@@ -323,7 +328,8 @@
       :dgms_body__hiccup
       (comment-body-as-hiccup (:body c "")))
     ;; NOTE keeping this might cause serialization issues. (Val, 30 Apr 2020)
-    (dissoc :dgms_body_vector)))
+    (dissoc :dgms_body_vector)
+    (supd/supdate {:dgms_comment_parent #(prepare-comment-for-labelling-ui %)})))
 
 (defn next-comment-to-label
   []
@@ -344,6 +350,6 @@
 
   (next-comment-to-label)
 
-  (trn-db/all-labels! dataset-id)
+  (trn-db/all-labels dataset-id)
 
   *e)

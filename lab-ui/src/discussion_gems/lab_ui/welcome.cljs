@@ -1,6 +1,8 @@
 (ns discussion-gems.lab-ui.welcome
   (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [rum.core :as rum]
+            [goog.object]
+            [goog.string]
             [cljs-http.client :as http]
             [cljs.core.async :as a :refer [<!]]))
 
@@ -140,13 +142,37 @@
     (:id c)
     "?context=8&depth=9"))
 
+(rum/defc <comment-content>
+  [c cited?]
+  [:div {:class (-> "card"
+                  (cond-> cited? (str " " "bg-light")))}
+   [:div {:class "card-header"}
+    [:h5 {:class "card-title"}
+     [:a {:href (permalink c) :target "_blank"}
+      [:pre (:name c)]]]
+    (when-let [subm (and
+                      (not cited?)
+                      (:dgms_comment_submission c))]
+      [:span
+       "in "
+       [:a {:href (str "https://www.reddit.com" (:permalink subm))
+            :target "_blank"}
+        ": "
+        (:title subm)
+        "(" [:code (:name subm)] ")"
+        (when-some [flair (:link_flair_text subm)]
+          [:span {:class "badge badge-secondary"} flair])]])]
+   [:div {:class "card-body"}
+    (:dgms_body__hiccup c)
+
+    (if-some [pc (:dgms_comment_parent c)]
+      (<comment-content> pc true)
+      [:div])]])
+
 (rum/defc <comment-to-label>
   [c]
   (if (some? c)
     [:div
-     ;; TODO back button
-     ;; TODO keyboard events
-     ;; TODO blockquotes display
      [:div
       [:button {:class "btn btn-primary"
                 :on-click (fn [_] (savel-label-and-load-next! 0.))} "0"]
@@ -154,14 +180,7 @@
                 :on-click (fn [_] (savel-label-and-load-next! 1.))} "1"]
       [:button {:class "btn btn-secondary"
                 :on-click (fn [_] (savel-label-and-load-next! 0.5))} "?"]]
-     [:div
-      [:h4
-       [:a {:href (permalink c) :target "_blank"}
-        [:pre (:name c)]]]
-      [:div {:class "card"}
-       [:div {:class "card-body"}
-        ;; TODO display parent comment below (Val, 30 Apr 2020)
-        (:dgms_body__hiccup c)]]]]
+     (<comment-content> c false)]
     [:div
      [:p "Loading a comment to label..."]]))
 
@@ -175,6 +194,31 @@
           :comment-to-label prev-c
           :previous-comment nil)
         state))))
+
+
+(defn label-for-key
+  [k]
+  (case k
+    "p" 1.
+    "n" 0.
+    "u" 0.5
+    ("0" "1" "2" "3" "4" "5" "6" "7" "8" "9")
+    (/ (goog.string/parseInt k) 10.)
+    nil))
+
+(defn on-key!
+  [e]
+  (when-some [lbl (label-for-key
+                    (goog.object/get e "key"))]
+    (savel-label-and-load-next! lbl)))
+
+(defn listen-to-keyboard!
+  []
+  (let [node (first
+               (.getElementsByTagName js/document "body"))]
+    (.addEventListener node "keypress"
+      on-key!)))
+
 
 (rum/defc <welcome> < rum.core/reactive
   []
@@ -203,4 +247,5 @@
 
 (defn init! []
   (savel-label-and-load-next! nil)
+  (listen-to-keyboard!)
   (mount-ui!))

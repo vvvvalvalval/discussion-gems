@@ -60,7 +60,7 @@ create table labelled_data (
       [0 :ret])))
 
 
-(defn all-labels!
+(defn all-labels
   [dataset-id]
   (->>
     (jdbc/execute! ds
@@ -74,6 +74,14 @@ create table labelled_data (
              :labelled_data/datapoint_label__fressian uenc/fressian-decode})
           (u/rename-keys {:labelled_data/datapoint_data__fressian :labelled_data/datapoint_data
                           :labelled_data/datapoint_label__fressian :labelled_data/datapoint_label}))))))
+
+(defn count-labeled
+  [dataset-id]
+  (->
+    (jdbc/execute! ds
+      ["SELECT COUNT(*) AS n FROM labelled_data WHERE dataset_id = ?"
+       dataset-id])
+    (get-in [0 :n])))
 
 (defn clear-labels!
   [dataset-id]
@@ -89,7 +97,8 @@ create table labelled_data (
   (already-labeled? "myexp0" "point-id1")
   (already-labeled? "myexp0" "point-id-that-does-not-exist")
 
-  (all-labels! "discussion-gems.experiments.detecting-praise-comments--label")
+  (all-labels "discussion-gems.experiments.detecting-praise-comments--label")
+  (count-labeled "discussion-gems.experiments.detecting-praise-comments--label")
 
   (clear-labels! "discussion-gems.experiments.detecting-praise-comments--label")
   *e)
