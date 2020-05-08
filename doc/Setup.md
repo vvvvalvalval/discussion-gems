@@ -29,6 +29,8 @@ ubuntu@ip-172-31-28-231:~$ sha256sum Miniconda3-latest-Linux-x86_64.sh
 ubuntu@ip-172-31-28-231:~$ conda create -n discussion_gems_condaenv python=3.7
 
 ubuntu@ip-172-31-28-231:~$ conda activate discussion_gems_condaenv
+
+ubuntu@ip-172-31-28-231:~$ conda install -c conda-forge pymc3
 ```
 
 

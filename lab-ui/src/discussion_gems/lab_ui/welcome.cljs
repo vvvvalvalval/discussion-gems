@@ -3,6 +3,7 @@
   (:require [rum.core :as rum]
             [goog.object]
             [goog.string]
+            [goog.window]
             [cljs-http.client :as http]
             [cljs.core.async :as a :refer [<!]]))
 
@@ -40,7 +41,12 @@
                                    (ex-info "No comment to label!" {})))
                              :name)
                    'c (select-keys current-cmt
-                        [:name :link_id :dgms_comment_submission :body])
+                        [:name
+                         :link_id
+                         :dgms_comment_submission
+                         :body
+                         :discussion-gems.experiments.detecting-praise-comments/sample-slice
+                         :discussion-gems.experiments.detecting-praise-comments/presim-score])
                    'lbl lbl-or-nil}
                   :remote-eval/code-str
                   (pr-str
@@ -164,10 +170,19 @@
           [:span {:class "badge badge-secondary"} flair])]])]
    [:div {:class "card-body"}
     (:dgms_body__hiccup c)
-
-    (if-some [pc (:dgms_comment_parent c)]
-      (<comment-content> pc true)
-      [:div])]])
+    (when-not cited?
+      (if-some [pc (:dgms_comment_parent c)]
+        (<comment-content> pc true)
+        (or
+          (when-some [parent-id (:parent_id c)]
+            (let [parent-is-comment? (goog.string/startsWith parent-id "t1_")]
+              (when parent-is-comment?
+                (<comment-content>
+                  {:name parent-id
+                   :dgms_body__hiccup
+                   [:div "(Parent comment not available)"]}
+                  true))))
+          [:div])))]])
 
 (rum/defc <comment-to-label>
   [c]
@@ -208,9 +223,15 @@
 
 (defn on-key!
   [e]
-  (when-some [lbl (label-for-key
-                    (goog.object/get e "key"))]
-    (savel-label-and-load-next! lbl)))
+  (let [k (goog.object/get e "key")]
+    (case k
+      "o" (when-some [url (some-> @a-state :comment-to-label
+                            (permalink))]
+            (goog.window/open url))
+      "l" (return-to-previous-comment!)
+      (when-some [lbl (label-for-key k)]
+        (savel-label-and-load-next! lbl)))
+    true))
 
 (defn listen-to-keyboard!
   []

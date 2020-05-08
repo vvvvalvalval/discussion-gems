@@ -100,5 +100,6 @@ create table labelled_data (
   (all-labels "discussion-gems.experiments.detecting-praise-comments--label")
   (count-labeled "discussion-gems.experiments.detecting-praise-comments--label")
 
-  (clear-labels! "discussion-gems.experiments.detecting-praise-comments--label")
+  (comment
+    (clear-labels! "discussion-gems.experiments.detecting-praise-comments--label"))
   *e)
