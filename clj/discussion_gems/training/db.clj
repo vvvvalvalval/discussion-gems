@@ -60,7 +60,7 @@ create table labelled_data (
       [0 :ret])))
 
 
-(defn all-labels
+(defn all-labelled-data
   [dataset-id]
   (->>
     (jdbc/execute! ds
@@ -74,6 +74,26 @@ create table labelled_data (
              :labelled_data/datapoint_label__fressian uenc/fressian-decode})
           (u/rename-keys {:labelled_data/datapoint_data__fressian :labelled_data/datapoint_data
                           :labelled_data/datapoint_label__fressian :labelled_data/datapoint_label}))))))
+
+(defn all-labels
+  [dataset-id]
+  (->>
+    (jdbc/execute! ds
+      ["SELECT datapoint_id, datapoint_label__fressian FROM labelled_data WHERE dataset_id = ?"
+       dataset-id])
+    (u/index-and-map-by
+      :labelled_data/datapoint_id
+      (fn [row]
+        (-> row :labelled_data/datapoint_label__fressian uenc/fressian-decode)))))
+
+(defn all-labeled-ids
+  [dataset-id]
+  (->>
+    (jdbc/execute! ds
+      ["SELECT datapoint_id FROM labelled_data WHERE dataset_id = ?"
+       dataset-id])
+    (into #{}
+      (map :labelled_data/datapoint_id))))
 
 (defn count-labeled
   [dataset-id]
@@ -97,7 +117,10 @@ create table labelled_data (
   (already-labeled? "myexp0" "point-id1")
   (already-labeled? "myexp0" "point-id-that-does-not-exist")
 
-  (all-labels "discussion-gems.experiments.detecting-praise-comments--label")
+  (all-labelled-data "discussion-gems.experiments.detecting-praise-comments--label")
+  (time
+    (do (all-labeled-ids "discussion-gems.experiments.detecting-praise-comments--label")
+        nil))
   (count-labeled "discussion-gems.experiments.detecting-praise-comments--label")
 
   (comment

@@ -154,6 +154,12 @@
     rdd))
 
 
+(defn rdd-java-context
+  ^JavaSparkContext
+  [^JavaRDDLike rdd]
+  (JavaSparkContext.
+    (.context rdd)))
+
 
 (defn diversified-sample
   "See https://vvvvalvalval.github.io/posts/2019-09-13-diversified-sampling-mining-large-datasets-for-special-cases.html"

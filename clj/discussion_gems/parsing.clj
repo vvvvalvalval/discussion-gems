@@ -15,6 +15,7 @@
 
 
 ;; TODO numbers ?
+;; TODO unescape HTML entities, e.g with https://commons.apache.org/proper/commons-text/javadocs/api-release/org/apache/commons/text/StringEscapeUtils.html#escapeHtml4-java.lang.String- (Val, 18 May 2020)
 
 ;; ------------------------------------------------------------------------------
 ;; Markdown parsing
@@ -132,6 +133,7 @@ Ceci n'est pas une citation.")
     (keep :body)
     (filter
       (fn [txt]
+
         (re-find #"^&gt" txt)))
     (take 10)
     vec)

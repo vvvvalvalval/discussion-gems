@@ -37,7 +37,8 @@
             [libpython-clj.python :refer [py. py.. py.-] :as py])
   (:import (edu.stanford.nlp.pipeline StanfordCoreNLP CoreSentence CoreDocument)
            (edu.stanford.nlp.ling CoreLabel)
-           (java.util.zip GZIPOutputStream GZIPInputStream)))
+           (java.util.zip GZIPOutputStream GZIPInputStream)
+           (org.apache.spark.api.java JavaRDD)))
 
 
 ;; ------------------------------------------------------------------------------
@@ -59,7 +60,7 @@
   "We restrict ourselves to content marked with flairs dedicated to socio-political discussions.
 
   That's where we're likely to find most of the content of interest and less noise than in other discussions."
-  #{"Culture"
+  #{;"Culture"
     "Politique"
     "Science"
     "Société"
@@ -204,6 +205,33 @@
   *e)
 
 
+(defn enrich-with-parent-comments
+  [^JavaRDD all-comments-rdd, comments-coll]
+  (let [sc (uspark/rdd-java-context all-comments-rdd)
+        selected-parent-ids--bv
+        (uspark/broadcast-var sc
+          (into #{}
+            (keep :parent_id)
+            comments-coll))
+        name->parent-comment
+        (->> all-comments-rdd
+          ;; NOTE we're ignoring the cases when the parent is a post. That should be rare enough. (Val, 01 May 2020)
+          (spark/filter
+            (fn parent-of-selected? [pc]
+              (contains?
+                (uspark/broadcast-value selected-parent-ids--bv)
+                (:name pc))))
+          (spark/collect)
+          (u/index-and-map-by :name identity))]
+    (->> comments-coll
+      (mapv
+        (fn add-parent [c]
+          (merge c
+            (when-some [pc (get name->parent-comment
+                             (:parent_id c))]
+              {:dgms_comment_parent pc})))))))
+
+
 (defn select-dataset-to-label
   [sc]
   (letfn [(rand-from-comment [c]
@@ -237,33 +265,16 @@
                 (drop 5000)
                 (u/draw-n-by rand-from-comment 3000)
                 (map #(assoc % ::sample-slice ::top-presim-1)))
-              ordinary-comments))
-          selected-parent-ids--bv
-          (uspark/broadcast-var sc
-            (into #{}
-              (keep :parent_id)
-              selected-comments))
-          name->parent-comment
-          (->> comments-rdd
-            ;; NOTE we're ignoring the cases when the parent is a post. That should be rare enough. (Val, 01 May 2020)
-            (spark/filter
-              (fn parent-of-selected? [pc]
-                (contains?
-                  (uspark/broadcast-value selected-parent-ids--bv)
-                  (:name pc))))
-            (spark/collect)
-            (u/index-and-map-by :name identity))]
+              ordinary-comments))]
       {:n-considered-comments n-comments
        :presim-threshold presim-threshold
        :sampled-comments
        (->> selected-comments
+         (enrich-with-parent-comments comments-rdd)
          (mapv
            (fn enrich-comment [c]
-             (merge c
-               {::presim-score (comment-pre-sim-score c)}
-               (when-some [pc (get name->parent-comment
-                                (:parent_id c))]
-                 {:dgms_comment_parent pc})))))})))
+             (assoc c
+               ::presim-score (comment-pre-sim-score c)))))})))
 
 
 
@@ -362,33 +373,20 @@
                 (-> c ::sample-slice (= ::ordinary))))
       (:sampled-comments @d_dataset-to-label))))
 
-(defn next-comment-to-label
-  []
-  (loop []
-    (let [c (rand-nth @d_ordinary-comments-to-label)]
-      (if (trn-db/already-labeled? dataset-id (:name c))
-        (recur)
-        (prepare-comment-for-labelling-ui c)))))
 
-(defn save-comment-label!
-  [c-name c lbl]
-  (trn-db/save-label!
-    dataset-id c-name
-    c
-    (double lbl)))
 
 (comment
 
   (next-comment-to-label)
 
-  (trn-db/all-labels dataset-id)
+  (trn-db/all-labelled-data dataset-id)
 
   (-
     (->> @d_dataset-to-label
       :sampled-comments
       (filter #(-> % ::sample-slice (= ::ordinary)))
       count)
-    (->> (trn-db/all-labels dataset-id)
+    (->> (trn-db/all-labelled-data dataset-id)
       (filter #(-> % :labelled_data/datapoint_data ::sample-slice (= ::ordinary)))
       count))
 
@@ -412,7 +410,7 @@
       "Économie" 93}
 
   (->>
-    (trn-db/all-labels dataset-id)
+    (trn-db/all-labelled-data dataset-id)
     (filter #(-> % :labelled_data/datapoint_label (> 0.5)))
     (map #(-> % :labelled_data/datapoint_data :dgms_comment_submission :link_flair_text))
     frequencies)
@@ -451,7 +449,7 @@
 
 (comment
 
-  (->> (trn-db/all-labels dataset-id)
+  (->> (trn-db/all-labelled-data dataset-id)
     (map
       (let [presim-threshold (:presim-threshold @d_dataset-to-label)]
         (fn [dp]
@@ -465,7 +463,7 @@
       [true true] 883}
 
 
-  (->> (trn-db/all-labels dataset-id)
+  (->> (trn-db/all-labelled-data dataset-id)
     (filter
       (fn [dp]
         (-> dp :labelled_data/datapoint_data ::sample-slice (= ::ordinary))))
@@ -477,7 +475,7 @@
 
 
   (def false-negatives
-    (->> (trn-db/all-labels dataset-id)
+    (->> (trn-db/all-labelled-data dataset-id)
       (filter
         (let [presim-threshold (:presim-threshold @d_dataset-to-label)]
           (fn [dp]
@@ -567,7 +565,7 @@
 
 (comment ;; distribution of presim-scores
 
-  (->> (trn-db/all-labels dataset-id)
+  (->> (trn-db/all-labelled-data dataset-id)
     (filter #(-> % :labelled_data/datapoint_data ::sample-slice (= ::ordinary)))
     (map #(-> % :labelled_data/datapoint_data ::presim-score))
     (map #(-> % (* 10.) Math/floor (/ 10.)))
@@ -670,19 +668,164 @@
               patterns)))))))
 
 
+
+(defn collect-heuristic-global-statistics
+  [sc]
+  (let [{N_h+ true N_h- false}
+        (->> (dgds/comments-all-rdd sc)
+          (spark/filter #(is-comment-of-interest? %))
+          (spark/key-by #(heuristic-positive? %))
+          (spark/map-values (constantly 1))
+          (spark/reduce-by-key +)
+          (spark/collect-map))]
+    {:N_h+ N_h+ :N_h- N_h-}))
+
+(defn sample-comments-by-heuristic
+  [sc {n-take :n-take
+       :or {n-take 30000}}]
+  (letfn [(rand-from-comment [c]
+            (-> c :name
+              (str "_H")
+              u/draw-random-from-string))]
+    (let [all-comments (dgds/comments-all-rdd sc)]
+      (->> all-comments
+        (spark/filter #(is-comment-of-interest? %))
+        (spark/filter #(heuristic-positive? %))
+        (spark/key-by rand-from-comment)
+        (spark/sort-by-key)
+        (spark/values)
+        (spark/take n-take)
+        (into [])
+        (enrich-with-parent-comments all-comments)))))
+
+(comment ;; Building a dataset filtered by heuristic to label
+
+  (def d_heuristic-dataset
+    (uspark/run-local
+      (fn [sc]
+        (sample-comments-by-heuristic sc {:n-take 30000}))))
+
+  (take 3 @d_heuristic-dataset)
+
+  (def d_saved
+    (mfd/chain d_heuristic-dataset
+      (fn [_]
+        (with-open [wtr
+                    (uenc/fressian-writer
+                      (GZIPOutputStream.
+                        (io/output-stream
+                          "../detecting-praise-comments_heuristic-dataset_v0.fressian.gz")))]
+          (fressian/write-object wtr @d_heuristic-dataset)))))
+
+  (def d_global-heuristic-stats
+    (uspark/run-local
+      (fn [sc]
+        (collect-heuristic-global-statistics sc))))
+
+  @d_global-heuristic-stats
+  => {:N_h+ 264335, :N_h- 1428833}
+
+  *e)
+
+
+(def d_global-heuristic-stats
+  (delay
+    {:N_h+ 264335, :N_h- 1428833}))
+
+
+
+(def d_heuristic-dataset
+  (delay
+    (with-open [rdr (uenc/fressian-reader
+                      (GZIPInputStream.
+                        (io/input-stream
+                          "../detecting-praise-comments_heuristic-dataset_v0.fressian.gz")))]
+      (fressian/read-object rdr))))
+
+
+
+
+(comment ;; recurring negatives
+
+  (->> @d_heuristic-dataset
+    (filter is-comment-of-interest?)
+    (filter heuristic-positive?)
+    (map
+      (fn [c]
+        (boolean
+          (when-some [body-normalized
+                      (some-> (raw-body c)
+                        (str/lower-case))]
+            (re-matches #"(\s)*source(\s)*\?(\s)*"
+              body-normalized)))))
+    (frequencies))
+  => {false 29928, true 72} ;; wow, disappointing
+
+  (->> @d_heuristic-dataset
+    (filter is-comment-of-interest?)
+    (filter heuristic-positive?)
+    (map
+      (fn [c]
+        (boolean
+          (when-some [body-normalized
+                      (some-> (raw-body c)
+                        (str/lower-case))]
+            (str/includes?
+              body-normalized
+              "ce commentaire a été supprimé")))))
+    (frequencies))
+  => {false 29879, true 121}
+
+  *e)
+
+
+(defn uniformly-sampled-comments
+  []
+  (->> @d_dataset-to-label
+    :sampled-comments
+    (filter #(and
+               (is-comment-of-interest? %) ;; NOTE because of residual "Culture" flair comments
+               (-> % ::sample-slice (= ::ordinary))))))
+
+
 (defn heuristic-counts
-  [labelled-points]
-  (let [freqs
-        (->> labelled-points
-          (map
-            (fn [dp]
-              [(heuristic-positive? (:labelled_data/datapoint_data dp))
-               (-> dp :labelled_data/datapoint_label (> 0.5))]))
-          frequencies)]
-    {:Nh+r+ (get freqs [true true] 0)
-     :Nh-r+ (get freqs [false true] 0)
-     :Nh+r- (get freqs [true false] 0)
-     :Nh-r- (get freqs [false false] 0)}))
+  []
+  (let [name->label (trn-db/all-labels dataset-id)
+        unif-sampled-comments (uniformly-sampled-comments)]
+    (merge
+      @d_global-heuristic-stats
+      (let [freqs
+            (->> unif-sampled-comments
+              (keep
+                (fn [c]
+                  (when-some [lbl (get name->label (:name c))]
+                    [(heuristic-positive? c)
+                     (> lbl 0.5)])))
+              frequencies)]
+        {:Nh+r+ (get freqs [true true] 0)
+         :Nh-r+ (get freqs [false true] 0)
+         :Nh+r- (get freqs [true false] 0)
+         :Nh-r- (get freqs [false false] 0)})
+      (let [{N1_h+r+ true N1_h+r- false, :or {N1_h+r+ 0 N1_h+r- 0}}
+            (->> @d_heuristic-dataset
+              (filter is-comment-of-interest?)
+              (filter heuristic-positive?)
+              (remove
+                (let [to-ignore-ids
+                      (into #{}
+                        (comp
+                          (map :name)
+                          (filter name->label))
+                        unif-sampled-comments)]
+                  (fn already-labelled-in-first-dataset? [c]
+                    (contains? to-ignore-ids (:name c)))))
+              (keep
+                (fn [c]
+                  (when-some [lbl (get name->label (:name c))]
+                    (> lbl 0.5))))
+              frequencies)]
+        {:N1_h+r+ N1_h+r+, :N1_h+r- N1_h+r-}))))
+
 
 
 (require-python '[scipy.special])
@@ -721,7 +864,7 @@
 (comment ;; Inference of Heuristic Recall (i.e: P(h+|r+))
 
   (heuristic-counts
-    (->> (trn-db/all-labels dataset-id)
+    (->> (trn-db/all-labelled-data dataset-id)
       (filter #(-> % :labelled_data/datapoint_data ::sample-slice (= ::ordinary)))))
   => {:Nh+r+ 52, :Nh-r+ 8, :Nh+r- 854, :Nh-r- 4143}
 
@@ -736,7 +879,7 @@
 
   ;; We might have a lot of noise samples from the "Culture" flair. What if we remove those?
   (heuristic-counts
-    (->> (trn-db/all-labels dataset-id)
+    (->> (trn-db/all-labelled-data dataset-id)
       (remove #(-> % :labelled_data/datapoint_data
                  :dgms_comment_submission :link_flair_text (= "Culture")))
       (filter #(-> % :labelled_data/datapoint_data ::sample-slice (= ::ordinary)))))
@@ -758,26 +901,27 @@
 (comment ;; Inference of Heuristic Precision (i.e: P(r+|h+))
 
   (def hcnts
-    (heuristic-counts
-      (->> (trn-db/all-labels dataset-id)
-        (remove #(-> % :labelled_data/datapoint_data
-                   :dgms_comment_submission :link_flair_text (= "Culture")))
-        (filter #(-> % :labelled_data/datapoint_data ::sample-slice (= ::ordinary))))))
+    (heuristic-counts))
 
-  #_
-
-  (use '(anglican core emit runtime))
 
   (do
-    (require-python '[discussion_gems_py.praise_comments])
+    (require-python '[discussion_gems_py.praise_comments #_:reload])
     (require-python '[pymc3])
+    (require-python '[pymc3.stats])
     (require-python '[matplotlib.pyplot :as plt]))
 
   (def trace
     (discussion_gems_py.praise_comments/sample_heuristic_precision
       (py/->py-dict
-        {"n1_Hp_Rp" 0,
-         "n1_Hp" 0,
+        {"n1_Hp_Rp" (:N1_h+r+ hcnts 0),
+         "n1_Hp" (+
+                   (:N1_h+r+ hcnts 0)
+                   (:N1_h+r- hcnts 0)),
+
+         "P_Hp" (/ (:N_h+ hcnts 0)
+                  (+
+                    (:N_h+ hcnts 0)
+                    (:N_h- hcnts 0)))
 
          "n_Hp_Rp" (:Nh+r+ hcnts)
          "n_Hn_Rp" (:Nh-r+ hcnts),
@@ -785,53 +929,74 @@
          "n_Hn_Rn" (:Nh-r- hcnts)})
       (py/->py-dict
         {"draws" 10000
-         "tune" 5000})))
+         "tune" 100000})))
+
+
+  (py/get-item
+    (py/cfn pymc3.stats/summary trace :credible_interval 0.99)
+    (py/->py-list ["hpd_0.5%" "mean" "hpd_99.5%"]))
+  ;           hpd_0.5%       mean  hpd_99.5%
+  ;M_1000p  11586.000  14026.430  16683.000
+  ;p_R          0.009      0.011      0.013
+  ;p_H          0.851      0.943      0.998
+  ;q            0.057      0.067      0.077
 
   (pymc3/plot_posterior trace)
   (def plots
     (py/cfn pymc3/plot_posterior trace :credible_interval 0.99))
 
-
-
   (plt/show)
 
-
-
   *e)
 
 
-(defn sample-comments-by-heuristic
-  [sc {n-take :n-take
-       :or {n-take 30000}}]
-  (letfn [(rand-from-comment [c]
-            (-> c :name
-              (str "_H")
-              u/draw-random-from-string))]
-    (->> (dgds/comments-all-rdd sc)
-      (spark/filter #(is-comment-of-interest? %))
-      (spark/filter #(heuristic-positive? %))
-      (spark/key-by rand-from-comment)
-      (spark/sort-by-key)
-      (spark/values)
-      (spark/take n-take)
-      (into []))))
 
-(comment ;; Building a dataset filtered by heuristic to label
+;; ------------------------------------------------------------------------------
+;; API  for labelling UI
 
-  (def d_heuristic-dataset
-    (uspark/run-local
-      (fn [sc]
-        (sample-comments-by-heuristic sc {:n-take 30000}))))
+(comment
 
-  (def d_saved
-    (mfd/chain d_selected-comments
-      (fn [_]
-        (with-open [wtr
-                    (uenc/fressian-writer
-                      (GZIPOutputStream.
-                        (io/output-stream
-                          #_ dataset-to-label-path
-                          "../detecting-praise-comments_heuristic-dataset_v0.fressian.gz")))]
-          (fressian/write-object wtr @d_heuristic-dataset)))))
+  (count @d_heuristic-dataset)
+
+  ;; How many are already labelled ?
+  (->> @d_heuristic-dataset
+    (filter
+      (let [labelled-ids (trn-db/all-labeled-ids dataset-id)]
+        (fn [c]
+          (contains? labelled-ids
+            (:name c)))))
+    count)
+  => 376
 
   *e)
+
+(defn next-comment-to-label
+  []
+  (prepare-comment-for-labelling-ui
+    #_(loop []
+        (let [c (rand-nth
+                  #_@d_ordinary-comments-to-label
+                  @d_heuristic-dataset)]
+          (if (trn-db/already-labeled? labelling-ui-dataset-id (:name c))
+            (recur)
+            c)))
+    (-> @d_heuristic-dataset
+      (->>
+        (remove
+          (let [labelled-ids (trn-db/all-labeled-ids dataset-id)]
+            (fn [c]
+              (contains? labelled-ids (:name c))))))
+      first
+      (or
+        (throw
+          (ex-info
+            "No more comments to label!"
+            {}))))))
+
+(defn save-comment-label!
+  [c-name c lbl]
+  (trn-db/save-label!
+    dataset-id
+    c-name
+    c
+    (double lbl)))

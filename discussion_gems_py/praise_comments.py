@@ -49,8 +49,8 @@ def sample_heuristic_precision(hcnts, sample_kwargs):
     r1 = pm.Binomial('r1', n1_Hp, q, observed=n1_Hp_Rp)
     #pf = pm.Deterministic('pf', q / p_R)
 
-    target_positives = 1000
-    M_1000p = pm.NegativeBinomial('M_1000p', target_positives * (1 - q) / q, target_positives)
+    #target_positives = 1000
+    #M_1000p = pm.NegativeBinomial('M_1000p', target_positives * (1 - q) / q, target_positives)
 
     trace = pm.sample(**sample_kwargs)  #(10000, tune=5000)
 
