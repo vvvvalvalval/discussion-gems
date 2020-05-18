@@ -23,11 +23,11 @@
   buddy/buddy-core {:mvn/version "1.6.0"}
 
   ;; Spark
-  org.apache.hadoop/hadoop-client {:mvn/version "2.9.0"}
+  ;org.apache.hadoop/hadoop-client {:mvn/version "2.9.0"}
   com.fasterxml.jackson.core/jackson-databind {:mvn/version "2.6.5"} ;; Because Spark 2.11 wants that
-  org.apache.spark/spark-core_2.10 {:mvn/version "2.1.0"}
-  org.apache.spark/spark-sql_2.10 {:mvn/version "2.1.0"}
-  org.apache.spark/spark-mllib_2.10 {:mvn/version "2.1.0"}
+  org.apache.spark/spark-core_2.11 {:mvn/version "2.4.5"}
+  org.apache.spark/spark-sql_2.11 {:mvn/version "2.4.5"}
+  org.apache.spark/spark-mllib_2.11 {:mvn/version "2.4.5"}
   gorillalabs/sparkling {:mvn/version "2.1.3"}
 
 
