@@ -12,7 +12,7 @@ sudo apt-get -y install tree jq curl git-core openjdk-8-jdk maven rlwrap
 sudo apt-get -y install python3-venv python3-pip xdg-utils
 
 
-sudo update-alternatives --install /usr/bin/java java /usr/lib/jvm/java-8-openjdk-amd64/bin/java 1000
+sudo update-alternatives --install /usr/bin/java java /usr/lib/jvm/java-8-openjdk-amd64/bin/java 12345
 curl -O https://download.clojure.org/install/linux-install-1.10.1.536.sh
 chmod +x linux-install-1.10.1.536.sh
 sudo ./linux-install-1.10.1.536.sh

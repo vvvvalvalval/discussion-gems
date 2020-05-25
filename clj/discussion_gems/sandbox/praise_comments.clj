@@ -17,7 +17,7 @@
             [clojure.pprint :as pp]
             [discussion-gems.parsing :as parsing]
             [discussion-gems.data-sources :as dgds]
-            ; [oz.core :as oz]
+            [oz.core :as oz]
             [discussion-gems.algs.word-embeddings :as wmbed])
   (:import (edu.stanford.nlp.pipeline StanfordCoreNLP CoreDocument CoreSentence)
            (edu.stanford.nlp.ling CoreLabel)
