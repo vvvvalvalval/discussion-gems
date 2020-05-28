@@ -6,7 +6,9 @@
             [manifold.deferred :as mfd]
             [discussion-gems.utils.spark :as uspark]
             [sparkling.conf :as conf]
-            [discussion-gems.data-sources :as dgds])
+            [discussion-gems.data-sources :as dgds]
+            [discussion-gems.indexing.elasticsearch-schema]
+            [discussion-gems.wrappers.elasticsearch-client :as es])
   (:import (org.elasticsearch.spark.rdd.api.java JavaEsSpark)
            (org.apache.spark.api.java JavaRDD)))
 
@@ -15,6 +17,12 @@
   {:spark/context sc
    :reddit-docs-submissions (dgds/submissions-all-rdd sc)
    :reddit-docs-comments (dgds/comments-all-rdd sc)})
+
+(defn get-md-sample-data-sources
+  [sc]
+  {:spark/context sc
+   :reddit-docs-submissions (dgds/subm-md-sample-rdd sc)
+   :reddit-docs-comments (dgds/comments-md-sample-rdd sc)})
 
 (def dag_indexing
   {:raw-content-es-docs
@@ -64,12 +72,23 @@
 
 (comment
 
-  (def es-url "")
+
+
+  (def es-url
+    (let [es-instance-domain "ip-172-31-70-82.ec2.internal"]
+      (str "http://" es-instance-domain ":9200")))
 
   (def es-index-name "reddit-raw-content--0")
 
+  (def esc (es/basic-client es-url))
+
+  ;; Initializing the index
+  @(es/request esc
+     {:method :put :url [es-index-name]
+      :body discussion-gems.indexing.elasticsearch-schema/mapping-raw-content})
+
   (def done
     (index-raw-content! es-url es-index-name
-      (fn [sc] (get-data-sources sc))))
+      (fn [sc] (get-md-sample-data-sources #_get-data-sources sc))))
 
   *e)
