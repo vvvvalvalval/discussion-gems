@@ -1,6 +1,8 @@
 (ns discussion-gems.wrappers.elasticsearch-client
   (:require [qbits.spandex :as spandex]
-            [manifold.deferred :as mfd]))
+            [manifold.deferred :as mfd])
+  (:import (java.time Instant)
+           (java.time.format DateTimeFormatter FormatStyle)))
 
 ;; ------------------------------------------------------------------------------
 ;; IO
@@ -23,3 +25,20 @@
         :success (fn [resp] (mfd/success! d resp))
         :error (fn [err] (mfd/error! d err))))
     d))
+
+
+;; ------------------------------------------------------------------------------
+;; Encoding
+
+(defn es-encode-instant [^Instant t]
+  ;; Reference: https://www.elastic.co/guide/en/elasticsearch/reference/7.7/date.html
+  (.format DateTimeFormatter/ISO_INSTANT t))
+
+
+(comment
+  (def t (Instant/now))
+
+  (es-encode-instant t)
+  => "2020-05-30T16:44:24.368Z"
+
+  *e)

@@ -45,6 +45,7 @@
   edu.stanford.nlp/stanford-corenlp-models-french {:local/root "./models/stanford-french-corenlp-2018-10-05-models.jar"} ;; NOTE obtained by wget https://nlp.stanford.edu/software/stanford-french-corenlp-2018-10-05-models.jar
   lambdaisland/regal {:git/url "https://github.com/lambdaisland/regal.git" :sha "b059fdb06d5586a9a04c27e7b011c467ad8546db"}
   org.elasticsearch/elasticsearch-spark-20_2.11 {:mvn/version "7.7.0"}
+  commons-httpclient/commons-httpclient {:mvn/version "3.1"} ;; NOTE necessary to fix missing class in the elasticsearch-spark. (Val, 29 May 2020)
   cc.qbits/spandex {:mvn/version "0.7.4"} ;; ES client
   org.apache.lucene/lucene-core {:mvn/version "8.5.1"}
   org.apache.lucene/lucene-analyzers-common {:mvn/version "8.5.1"}
@@ -72,6 +73,9 @@
                 criterium {:mvn/version "0.4.5"}
                 vvvvalvalval/scope-capture {:mvn/version "0.3.2"}
                 vvvvalvalval/scope-capture-nrepl {:mvn/version "0.2.0"}}}
+
+  :test
+  {:extra-paths ["test"]}
 
   :nREPL ;; Enables you to run a remote Clojure REPL via nREPL.
   {:extra-deps

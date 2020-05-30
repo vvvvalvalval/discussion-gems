@@ -11,7 +11,8 @@
            (java.util ArrayList)
            (org.apache.lucene.analysis.tokenattributes CharTermAttribute)
            (org.apache.lucene.analysis.fr FrenchAnalyzer)
-           (edu.stanford.nlp.tagger.maxent MaxentTagger)))
+           (edu.stanford.nlp.tagger.maxent MaxentTagger)
+           (java.time Instant)))
 
 
 ;; TODO numbers ?
@@ -195,18 +196,31 @@ Ceci n'est pas une citation.")
   *e)
 
 
+(defn non-empty-md-txt
+  [^String src-md-txt]
+  (when-not (or
+              (nil? src-md-txt)
+              (contains?
+                #{"[deleted]"
+                  "[removed]"
+                  "[supprimé]"}
+                src-md-txt)
+              (str/blank? src-md-txt))
+    src-md-txt))
+
 
 (defn md->html-forest
   "Parses a Reddit markdown into a recursive data structure."
   [^String md-txt]
-  (if (= md-txt "[deleted]")
-    nil
-    (get-in
-      (crouton.html/parse-string
-        (markdown.core/md-to-html-string
-          (str/replace md-txt
-            "&gt;" ">")))
-      [:content 1 :content])))
+  (some-> md-txt
+    (non-empty-md-txt)
+    (as-> md-txt
+      (get-in
+        (crouton.html/parse-string
+          (markdown.core/md-to-html-string
+            (str/replace md-txt
+              "&gt;" ">")))
+        [:content 1 :content]))))
 
 
 (defn raw-text-contents
@@ -1096,7 +1110,17 @@ Ceci n'est pas une citation.")
   *e)
 
 
+;; ------------------------------------------------------------------------------
+;; Dates
 
+
+(defn instant-from-reddit-utc-field
+  ^Instant [v]
+  (when (some? v)
+    (Instant/ofEpochSecond
+      (long
+        (-> v
+          (cond-> (string? v) (Long/parseLong 10)))))))
 
 
 ;; ------------------------------------------------------------------------------

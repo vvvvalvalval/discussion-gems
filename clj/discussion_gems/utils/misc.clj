@@ -3,6 +3,20 @@
             [buddy.core.hash])
   (:import (java.util Properties Arrays)))
 
+
+(defn remove-nil-vals
+  "Transforms a map by removing entries with a nil value."
+  [m]
+  (when (some? m)
+    (persistent!
+      (reduce-kv
+        (fn [tm k v]
+          (if (nil? v)
+            (dissoc! tm k)
+            tm))
+        (transient m)
+        m))))
+
 (defn index-and-map-by
   [kf vf coll]
   (persistent!
