@@ -1,0 +1,94 @@
+= Pépites de Discussion
+
+Ce projet construit des outils algorithmiques (_Text Mining_ / _Information Retrieval_) pour aider à la recherche d'échanges particulièrement enrichissants sur https://www.reddit.com/r/france[r/france], un des principaux forums de discussion francophones sur le Web.
+
+Il s'agit d'un projet personnel, fait sur mon temps libre.
+
+
+== Motivation
+
+On trouve sur les forums des interventions de grande qualité... de temps en temps, quand on a de la chance. Elles sont noyées dans une masse d'échanges peu enrichissants : réactions colériques ou haineuses, commentaires peu travaillés, explications mal sourcées, argumentaires mal soutenus, ou tout simplement discussions décontractées, bienvenues mais pas inoubliables. À cause de cette dilution, beaucoup de personnes ont renoncé avec fatalisme à avoir des échanges enrichissants en ligne, voyant les forums comme le domaine des "trolls" et des extrémistes.
+
+Qu'entend-on par _"interventions de qualité"_ ? Ça peut être au choix : des explications particulièrement instructives, des faits trop peu connus, des témoignages essentiels, des arguments qui font changer les mentalités... ce qu'on peut espérer de mieux du dialogue.
+
+Ces "pépites de discussion" méritent une visibilité et une postérité bien plus grandes que ce que leur donne le Web aujourd'hui, parce qu'elles ont le potentiel d'éclairer des débats de société importants, par des points de vue variés, experts et ordinaires. Les moteurs de recherche mainstream ne sont pas faits pour les trouver, et même les mécanismes de visibilité de Reddit (tels qu'utilisés aujourd'hui) promeuvent plutôt des contenus éphémères et des opinions (localement) consensuelles.
+
+Ceci motive la construction d'outils algorithmiques (moteurs de recherche / recommendations) spécialisés pour donner accès à ces contenus rares et précieux. Ce projet s'y adonne, en faisant le pari que les progrès importants en _Natural Language Processing_ de ces dernières années sont à la hauteur des problèmes techniques à résoudre.
+
+L'ambition n'est pas d'émettre automatiquement des jugements de qualité à la hauteur de ce que ferait des humains : l'état de l'art en IA n'en est pas à ce niveau de sens critique. Par contre, on peut espérer fournir des outils de recherche bien plus satisfaisants que ce qu'on peut faire aujourd'hui en fouillant Reddit au hasard.
+
+
+== Objectifs
+
+Ce projet se heurte à plusieurs problèmes de recherche encore ouverts en NLP, et je ne sais pas encore dire à quoi il aboutira. J'imagine les propositions de valeur suivantes, par ordre croissant d'ambition :
+
+. Corpus de commentaires "probablement intéressants" : un sous-ensemble du contenu du forum avec une haute densité de commentaires enrichissants.
+. Moteur de recherche (plus ou moins structurée) sur un tel corpus.
+. _"Quelqu'un l'a mieux dit" :_ écrire un brouillon de commentaire, et se faire suggérer des commentaires existants potentiellement mieux écrits au message similaire.
+. _"Quelqu'un a déjà bien répondu"_ : à partir d'un commentaire donné, chercher des réponses existantes de qualités à des commentaires similaires.
+. Robot de recommendations à partir de la fonctionnalité précédente, intervenant spontanément des les discussions pour suggérer des contenus pertinents.
+
+
+== Survol technologique
+
+Ce projet utilise comme technologies principales https://spark.apache.org/[Apache Spark], https://clojure.org/[Clojure], https://www.elastic.co/fr/elasticsearch/[ElasticSearch], https://www.elastic.co/fr/elasticsearch/[Python] et https://reactjs.org/[React.js].
+
+Les *problématiques techniques* principales à résoudre sur ce type de projet sont:
+
+- La *"logistique des données"* : acquérir, explorer, véhiculer, filtrer, transformer les données nécessaires au projet. _(Clojure, Spark)_
+- La mise en oeuvre d'**algorithmes scientifiques** de _Natural Language Processing_ / _Information Retrieval_ pour en extraire du sens. _(Python, ElasticSearch)_
+- Le développement d'**interfaces Web** pour y donner accès. _(Clojure, React.js)_
+
+Dans cette optique, le choix des technologies citées plus haut s'explique dans cet ordre :
+
+. Python donne accès à un riche écosystème de Machine Learning et de NLP.
+. ElasticSearch facilite la construction de moteur de recherche.
+. Les données étant de taille relativement conséquente (plusieurs millions de documents), Spark permet de les traiter avec expressivité et performance. (À noter cependant que les données sont suffisamment petites pour être traitables sur une seule machine / par un seul process, mais assez grosses pour que le parallélisme multi-coeurs soit souhaitable).
+. Clojure est un langage de programmation "tout terrain", particulièrement adapté à la fois à la "logistique des données" et à la construction d'interfaces Web (tant côté serveur que côté navigateur avec React.js). En outre, Clojure peut intéragir étroitement avec Spark et ElasticSearch, dont il partage la plateforme d'exécution (la https://en.wikipedia.org/wiki/Java_virtual_machine[JVM]).
+
+
+
+== Avancement
+
+
+=== Acquisition des données et Feature Engineering
+
+Les données historiques de r/france jusqu'à fin 2019 ont été téléchargées de https://files.pushshift.io[files.pushshift.io]; voir xref:./clj/discussion_gems/sandbox.clj[`discussion-gems.sandbox`] pour une exploration basique.
+
+Un https://vvvvalvalval.github.io/posts/2019-09-13-diversified-sampling-mining-large-datasets-for-special-cases.html[échantillon diversifié] a été constitué pour tester le traitement des données de manière robuste.
+
+En plus du langage naturel, on compte beaucoup sur des aspects hypertextes (liens, formattage, etc.) du contenu Reddit pour le Machine Learning. xref:./clj/discussion_gems/feature_engineering/reddit_markdown.clj[`discussion-gems.feature-engineering.reddit-markdown`] contient un pipeline d'extraction de features hypertextes et syntaxiques. La librarie `mapdag` est utilisée pour programmer ce pipeline de manière déclarative et performante.
+
+
+=== Indexation dans ElasticSearch
+
+xref:./clj/discussion_gems/indexing/spark_to_elasticsearch.clj[`discussion-gems.indexing.spark-to-elasticsearch`] contient des pipelines d'indexaction dans ElasticSearch. Les schémas des index ElasticSearch se trouvent dans xref:./clj//Users/val/projects/discussion-gems/discussion-gems/clj/discussion_gems/indexing/elasticsearch_schema.clj[`discussion-gems.indexing.elasticsearch-schema`].
+
+Des premières requêtes manuelles montrent que les résultats pertinents sont encore fortement dilués dans des commentaires de peu enrichissants, même en s'appuyant sur des filtres comme la longueur des commentaires, le nombre de liens, etc. Cela confirme la nécessité de features sémantiques moins superficiels.
+
+
+=== Identification de thèmes
+
+_(Avancement: expérimental.)_
+
+Dans l'optique d'identifier des thèmes, des algorithmes de clustering basiques (K-means, LDA) et d'étiquettage automatiques de clusters (Mutual Information sur n-grams) sont expérimentés dans xref:./clj/discussion_gems/sandbox/clustering.clj[`discussion-gems.sandbox.clustering`]. Les résultats sont encourageants : on voit se dégager des thématiques comme les Gilets Jaunes, la transition écologique, etc. Il y a encore du travail à faire pour éliminer certains thèmes "parasites" (notamment linguistiques) et pour rendre les résultats "user-friendly".
+
+
+
+=== Détection de commentaires acclamés
+
+Une des pistes les plus prometteuses pour trouver des interventions enrichissantes est de détecter des commentaires qui les décrivent explicitement comme telles (exemple: _"Merci beaucoup pour ces explications détaillées, c'est très intéressant !"_).
+
+xref:./clj/discussion_gems/experiments/detecting_praise_comments.clj[`discussion-gems.experiments.detecting-praise-comments`] construit un jeu de données étiqueté et des algorithmes de classification pour détecter ces "acclamations" (_"praise comments"_).
+
+Les résultats accumulés jusqu'ici indiquent qu'il y en a moins de 1%, ce qui complique la mise au point d'algorithmes de classification (problème de _class imbalance_), notamment l'étiquettage de jeux de données.
+
+L'approche choisie est d'utiliser une succession d'algorithmes de classification intermédiaires de faible précision, pour "zoomer" sur une région des données plus dense en cas positifs. Pour l'instant, un seul algorithme intermédiaire est utilisé (une heuristique basée sur des mots clefs), avec un recall d'environ 90% et une précision de 5%, ce qui augmente la densité en positifs d'un facteur 5 environ.
+
+Une analyse de données bayésienne, basée sur des simulations MCMC via PyMC3, est utilisée pour superviser la performance de la démarche au fil de l'étiquettage (voir xref:./discussion_gems_py/praise_comments.py[`praise_comments.py`]).
+
+Parce qu'il est nécessaire d'étiquetter beaucoup de données, et que la quantité d'informations contextuelles nécessaires à l'étiquettage varie fortement (notamment à cause du problème des commentaires potentiellement sarcastiques, par exemple : _"Merci pour cette contribution enrichissante."_), une UI sur-mesure optimisée pour l'étiquettage des commentaires Reddit a été développée dans xref:./lab-ui/src/discussion_gems/lab_ui/welcome.cljs[`discussion-gems.lab-ui.welcome`].
+
+Cette UI me permet d'étiquetter entre 1000 et 2000 exemples par jour. À ce jour, environ 15000 exemples ont été étiquettés.
+
+
