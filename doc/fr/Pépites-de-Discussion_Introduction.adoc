@@ -53,16 +53,16 @@ Dans cette optique, le choix des technologies citées plus haut s'explique dans 
 
 === Acquisition des données et Feature Engineering
 
-Les données historiques de r/france jusqu'à fin 2019 ont été téléchargées de https://files.pushshift.io[files.pushshift.io]; voir xref:./clj/discussion_gems/sandbox.clj[`discussion-gems.sandbox`] pour une exploration basique.
+Les données historiques de r/france jusqu'à fin 2019 ont été téléchargées de https://files.pushshift.io[files.pushshift.io]; voir xref:../../clj/discussion_gems/sandbox.clj[`discussion-gems.sandbox`] pour une exploration basique.
 
 Un https://vvvvalvalval.github.io/posts/2019-09-13-diversified-sampling-mining-large-datasets-for-special-cases.html[échantillon diversifié] a été constitué pour tester le traitement des données de manière robuste.
 
-En plus du langage naturel, on compte beaucoup sur des aspects hypertextes (liens, formattage, etc.) du contenu Reddit pour le Machine Learning. xref:./clj/discussion_gems/feature_engineering/reddit_markdown.clj[`discussion-gems.feature-engineering.reddit-markdown`] contient un pipeline d'extraction de features hypertextes et syntaxiques. La librarie `mapdag` est utilisée pour programmer ce pipeline de manière déclarative et performante.
+En plus du langage naturel, on compte beaucoup sur des aspects hypertextes (liens, formattage, etc.) du contenu Reddit pour le Machine Learning. xref:../../clj/discussion_gems/feature_engineering/reddit_markdown.clj[`discussion-gems.feature-engineering.reddit-markdown`] contient un pipeline d'extraction de features hypertextes et syntaxiques. La librarie `mapdag` est utilisée pour programmer ce pipeline de manière déclarative et performante.
 
 
 === Indexation dans ElasticSearch
 
-xref:./clj/discussion_gems/indexing/spark_to_elasticsearch.clj[`discussion-gems.indexing.spark-to-elasticsearch`] contient des pipelines d'indexaction dans ElasticSearch. Les schémas des index ElasticSearch se trouvent dans xref:./clj//Users/val/projects/discussion-gems/discussion-gems/clj/discussion_gems/indexing/elasticsearch_schema.clj[`discussion-gems.indexing.elasticsearch-schema`].
+xref:../../clj/discussion_gems/indexing/spark_to_elasticsearch.clj[`discussion-gems.indexing.spark-to-elasticsearch`] contient des pipelines d'indexaction dans ElasticSearch. Les schémas des index ElasticSearch se trouvent dans xref:../../clj//Users/val/projects/discussion-gems/discussion-gems/clj/discussion_gems/indexing/elasticsearch_schema.clj[`discussion-gems.indexing.elasticsearch-schema`].
 
 Des premières requêtes manuelles montrent que les résultats pertinents sont encore fortement dilués dans des commentaires de peu enrichissants, même en s'appuyant sur des filtres comme la longueur des commentaires, le nombre de liens, etc. Cela confirme la nécessité de features sémantiques moins superficiels.
 
@@ -71,7 +71,7 @@ Des premières requêtes manuelles montrent que les résultats pertinents sont e
 
 _(Avancement: expérimental.)_
 
-Dans l'optique d'identifier des thèmes, des algorithmes de clustering basiques (K-means, LDA) et d'étiquettage automatiques de clusters (Mutual Information sur n-grams) sont expérimentés dans xref:./clj/discussion_gems/sandbox/clustering.clj[`discussion-gems.sandbox.clustering`]. Les résultats sont encourageants : on voit se dégager des thématiques comme les Gilets Jaunes, la transition écologique, etc. Il y a encore du travail à faire pour éliminer certains thèmes "parasites" (notamment linguistiques) et pour rendre les résultats "user-friendly".
+Dans l'optique d'identifier des thèmes, des algorithmes de clustering basiques (K-means, LDA) et d'étiquettage automatiques de clusters (Mutual Information sur n-grams) sont expérimentés dans xref:../../clj/discussion_gems/sandbox/clustering.clj[`discussion-gems.sandbox.clustering`]. Les résultats sont encourageants : on voit se dégager des thématiques comme les Gilets Jaunes, la transition écologique, etc. Il y a encore du travail à faire pour éliminer certains thèmes "parasites" (notamment linguistiques) et pour rendre les résultats "user-friendly".
 
 
 
@@ -79,15 +79,15 @@ Dans l'optique d'identifier des thèmes, des algorithmes de clustering basiques 
 
 Une des pistes les plus prometteuses pour trouver des interventions enrichissantes est de détecter des commentaires qui les décrivent explicitement comme telles (exemple: _"Merci beaucoup pour ces explications détaillées, c'est très intéressant !"_).
 
-xref:./clj/discussion_gems/experiments/detecting_praise_comments.clj[`discussion-gems.experiments.detecting-praise-comments`] construit un jeu de données étiqueté et des algorithmes de classification pour détecter ces "acclamations" (_"praise comments"_).
+xref:../../clj/discussion_gems/experiments/detecting_praise_comments.clj[`discussion-gems.experiments.detecting-praise-comments`] construit un jeu de données étiqueté et des algorithmes de classification pour détecter ces "acclamations" (_"praise comments"_).
 
 Les résultats accumulés jusqu'ici indiquent qu'il y en a moins de 1%, ce qui complique la mise au point d'algorithmes de classification (problème de _class imbalance_), notamment l'étiquettage de jeux de données.
 
 L'approche choisie est d'utiliser une succession d'algorithmes de classification intermédiaires de faible précision, pour "zoomer" sur une région des données plus dense en cas positifs. Pour l'instant, un seul algorithme intermédiaire est utilisé (une heuristique basée sur des mots clefs), avec un recall d'environ 90% et une précision de 5%, ce qui augmente la densité en positifs d'un facteur 5 environ.
 
-Une analyse de données bayésienne, basée sur des simulations MCMC via PyMC3, est utilisée pour superviser la performance de la démarche au fil de l'étiquettage (voir xref:./discussion_gems_py/praise_comments.py[`praise_comments.py`]).
+Une analyse de données bayésienne, basée sur des simulations MCMC via PyMC3, est utilisée pour superviser la performance de la démarche au fil de l'étiquettage (voir xref:../../discussion_gems_py/praise_comments.py[`praise_comments.py`]).
 
-Parce qu'il est nécessaire d'étiquetter beaucoup de données, et que la quantité d'informations contextuelles nécessaires à l'étiquettage varie fortement (notamment à cause du problème des commentaires potentiellement sarcastiques, par exemple : _"Merci pour cette contribution enrichissante."_), une UI sur-mesure optimisée pour l'étiquettage des commentaires Reddit a été développée dans xref:./lab-ui/src/discussion_gems/lab_ui/welcome.cljs[`discussion-gems.lab-ui.welcome`].
+Parce qu'il est nécessaire d'étiquetter beaucoup de données, et que la quantité d'informations contextuelles nécessaires à l'étiquettage varie fortement (notamment à cause du problème des commentaires potentiellement sarcastiques, par exemple : _"Merci pour cette contribution enrichissante."_), une UI sur-mesure optimisée pour l'étiquettage des commentaires Reddit a été développée dans xref:../../lab-ui/src/discussion_gems/lab_ui/welcome.cljs[`discussion-gems.lab-ui.welcome`].
 
 Cette UI me permet d'étiquetter entre 1000 et 2000 exemples par jour. À ce jour, environ 15000 exemples ont été étiquettés.
 
