@@ -98,6 +98,9 @@ image::praise-comments-heuristic-bayesian-analysis-example.png[]
 
 Parce qu'il est nécessaire d'étiquetter beaucoup de données, et que la quantité d'informations contextuelles nécessaires à l'étiquettage varie fortement (notamment à cause du problème des commentaires potentiellement sarcastiques, par exemple : _"Merci pour cette contribution enrichissante."_), une *UI d'étiquettage sur-mesure* a été développée dans xref:../../lab-ui/src/discussion_gems/lab_ui/welcome.cljs[`discussion-gems.lab-ui.welcome`].
 
+.UI d'étiquettage dans le navigateur, pilotée par des raccorcis clavier.
+image::praise-comments-labelling-ui-demo.gif[]
+
 Cette UI me permet d'étiquetter entre 1000 et 2000 exemples par jour. À ce jour, environ 15000 exemples ont été étiquettés.
 
 *Prochaines étapes:*
