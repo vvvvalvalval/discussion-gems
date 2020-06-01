@@ -1,6 +1,6 @@
-= Pépites de Discussion
-
-:imagesdir: ../img
+Pépites de Discussion
+=====================
+:imagesdir: /doc/img
 
 Ce projet construit des outils algorithmiques (_Text Mining_ / _Information Retrieval_) pour aider à la recherche d'échanges particulièrement enrichissants sur https://www.reddit.com/r/france[r/france], un des principaux forums de discussion francophones sur le Web.
 
@@ -94,8 +94,7 @@ L'approche choisie est d'utiliser une succession d'algorithmes de classification
 Une *analyse de données bayésienne,* basée sur des simulations MCMC via PyMC3, est utilisée pour superviser la performance de la démarche au fil de l'étiquettage (voir xref:../../discussion_gems_py/praise_comments.py[`praise_comments.py`]).
 
 .Prédictions de probabilité de Praise Comments (p_R), recall (p_R) et précision (q) de l'heuristique de sélection.
-[caption="Analyse Bayésienne"]
-image::praise-comments-heuristic-bayesian-analysis-example.png
+image::praise-comments-heuristic-bayesian-analysis-example.png[]
 
 Parce qu'il est nécessaire d'étiquetter beaucoup de données, et que la quantité d'informations contextuelles nécessaires à l'étiquettage varie fortement (notamment à cause du problème des commentaires potentiellement sarcastiques, par exemple : _"Merci pour cette contribution enrichissante."_), une *UI d'étiquettage sur-mesure* a été développée dans xref:../../lab-ui/src/discussion_gems/lab_ui/welcome.cljs[`discussion-gems.lab-ui.welcome`].
 
