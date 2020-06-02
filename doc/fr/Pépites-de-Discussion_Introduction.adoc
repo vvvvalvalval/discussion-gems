@@ -5,9 +5,9 @@ Pépites de Discussion
 :toc-title: Table des Matières:
 
 
-Ce projet construit des outils algorithmiques (_Text Mining_ / _Information Retrieval_) pour aider à la recherche d'échanges particulièrement enrichissants sur https://www.reddit.com/r/france[r/france], un des principaux forums de discussion francophones sur le Web.
+Ce projet construit des outils algorithmiques (_Text Mining_ / _Information Retrieval_) pour aider à la recherche de commentaires particulièrement enrichissants sur https://www.reddit.com/r/france[r/france], un des principaux forums de discussion francophones sur le Web.
 
-Il s'agit d'un projet personnel, fait sur mon temps libre.
+Il s'agit d'un projet personnel, réalisé sur mon temps libre.
 
 
 == Motivation
@@ -16,11 +16,11 @@ On trouve sur les forums des interventions de grande qualité... de temps en tem
 
 Qu'entend-on par _"interventions de qualité"_ ? Ça peut être au choix : des explications particulièrement instructives, des faits trop peu connus, des témoignages essentiels, des arguments qui font changer les mentalités... ce qu'on peut espérer de mieux du dialogue.
 
-Ces "pépites de discussion" méritent une visibilité et une postérité bien plus grandes que ce que leur donne le Web aujourd'hui, parce qu'elles ont le potentiel d'éclairer des débats de société importants, par des points de vue variés, experts et ordinaires. Les moteurs de recherche mainstream ne sont pas faits pour les trouver, et même les mécanismes de visibilité de Reddit (tels qu'utilisés aujourd'hui) promeuvent plutôt des contenus éphémères et des opinions (localement) consensuelles.
+*Ces "pépites de discussion" méritent une visibilité et une postérité bien plus grandes* que ce que leur donne le Web aujourd'hui, parce qu'elles ont le potentiel d'éclairer des débats de société importants, par des points de vue variés, experts et ordinaires. Les moteurs de recherche mainstream ne sont pas faits pour les trouver, et même les mécanismes de visibilité de Reddit (tels qu'utilisés aujourd'hui) promeuvent plutôt des contenus éphémères et des opinions (localement) consensuelles.
 
 Ceci motive la construction d'outils algorithmiques (moteurs de recherche / recommendations) spécialisés pour donner accès à ces contenus rares et précieux. Ce projet s'y adonne, en faisant le pari que les progrès importants en _Natural Language Processing_ de ces dernières années sont à la hauteur des problèmes techniques à résoudre.
 
-L'ambition n'est pas d'émettre automatiquement des jugements de qualité à la hauteur de ce que ferait des humains : l'état de l'art en IA n'en est pas à ce niveau de sens critique. Par contre, on peut espérer fournir des outils de recherche bien plus satisfaisants que ce qu'on peut faire aujourd'hui en fouillant Reddit au hasard.
+L'ambition n'est pas d'émettre automatiquement des jugements de qualité à la hauteur de ce que feraient des humains : l'état de l'art en IA n'en est pas à ce niveau de sens critique. Par contre, on peut espérer fournir des outils de recherche bien plus satisfaisants que ce qu'on peut faire aujourd'hui en fouillant Reddit au hasard.
 
 
 == Objectifs
@@ -46,7 +46,7 @@ Les *problématiques techniques* principales à résoudre sur ce type de projet 
 
 Dans cette optique, le choix des technologies citées plus haut s'explique dans cet ordre :
 
-. Python donne accès à un riche écosystème de Machine Learning et de NLP.
+. Python donne accès à un riche écosystème de Machine Learning et de NLP (spaCy, Scikit-Learn, PyTorch, etc.)footnote:[Ceci dit, certaines librairies de Machine Learning de la JVM, comme Spark MlLib ou Stanford CoreNLP, sont utilisées lorsque c'est avantageux de le faire - typiquement parce qu'elles permettent une meilleure vitesse d'exécution pour des algorithmes de ML basiques. Python est plutôt réservé aux algorithmes pointus.]
 . ElasticSearch facilite la construction de moteur de recherche.
 . Les données étant de taille relativement conséquente (plusieurs millions de documents), Spark permet de les traiter avec expressivité et performance. (À noter cependant que les données sont suffisamment petites pour être traitables sur une seule machine / par un seul process, mais assez grosses pour que le parallélisme multi-coeurs soit souhaitable).
 . Clojure est un langage de programmation "tout terrain", particulièrement adapté à la fois à la "logistique des données" et à la construction d'interfaces Web (tant côté serveur que côté navigateur avec React.js). En outre, Clojure peut intéragir étroitement avec Spark et ElasticSearch, dont il partage la plateforme d'exécution (la https://en.wikipedia.org/wiki/Java_virtual_machine[JVM]).
@@ -55,21 +55,21 @@ Dans cette optique, le choix des technologies citées plus haut s'explique dans 
 
 == Avancement
 
-Le projet est encore en construction. À ce jour, il n'y a pas encore de fonctionnalité en ligne pour les utilisateurs finaux.
+Le projet est en construction. À ce jour, il n'y a pas encore de fonctionnalité en ligne pour les utilisateurs finaux.
 
 
 === Acquisition des données et Feature Engineering
 
-Les données historiques de r/france jusqu'à fin 2019 ont été téléchargées de https://files.pushshift.io[files.pushshift.io]; voir xref:../../clj/discussion_gems/sandbox.clj[`discussion-gems.sandbox`] pour une exploration basique.
+Les données historiques de r/france jusqu'à fin 2019 ont été téléchargées de https://files.pushshift.io[files.pushshift.io]; voir link:../../clj/discussion_gems/sandbox.clj[`discussion-gems.sandbox`] pour une exploration basique.
 
 Un https://vvvvalvalval.github.io/posts/2019-09-13-diversified-sampling-mining-large-datasets-for-special-cases.html[échantillon diversifié] a été constitué pour tester le traitement des données de manière robuste.
 
-En plus du langage naturel, on compte beaucoup sur des aspects hypertextes (liens, formattage, etc.) du contenu Reddit pour le Machine Learning. xref:../../clj/discussion_gems/feature_engineering/reddit_markdown.clj[`discussion-gems.feature-engineering.reddit-markdown`] contient un pipeline d'extraction de features hypertextes et syntaxiques.
+En plus du langage naturel, on compte beaucoup sur des aspects hypertextes (liens, formattage, etc.) du contenu Reddit pour le Machine Learning. link:../../clj/discussion_gems/feature_engineering/reddit_markdown.clj[`discussion-gems.feature-engineering.reddit-markdown`] contient un pipeline d'extraction de features hypertextes et syntaxiques.
 
 
 === Indexation dans ElasticSearch
 
-xref:../../clj/discussion_gems/indexing/spark_to_elasticsearch.clj[`discussion-gems.indexing.spark-to-elasticsearch`] contient des pipelines d'indexaction dans ElasticSearch. Les schémas des index ElasticSearch se trouvent dans xref:../../clj//Users/val/projects/discussion-gems/discussion-gems/clj/discussion_gems/indexing/elasticsearch_schema.clj[`discussion-gems.indexing.elasticsearch-schema`].
+link:../../clj/discussion_gems/indexing/spark_to_elasticsearch.clj[`discussion-gems.indexing.spark-to-elasticsearch`] contient des pipelines d'indexaction dans ElasticSearch. Les schémas des index ElasticSearch se trouvent dans link:../../clj//Users/val/projects/discussion-gems/discussion-gems/clj/discussion_gems/indexing/elasticsearch_schema.clj[`discussion-gems.indexing.elasticsearch-schema`].
 
 Des premières requêtes manuelles montrent que les résultats pertinents sont encore fortement dilués dans des commentaires de peu enrichissants, même en s'appuyant sur des filtres comme la longueur des commentaires, le nombre de liens, etc. Cela confirme la nécessité de features sémantiques moins superficiels.
 
@@ -78,7 +78,7 @@ Des premières requêtes manuelles montrent que les résultats pertinents sont e
 
 _(Avancement: expérimental.)_
 
-Dans l'optique d'identifier des thèmes, des algorithmes de clustering basiques (K-means, LDA) et d'étiquetage automatiques de clusters (Mutual Information sur n-grams) sont expérimentés dans xref:../../clj/discussion_gems/sandbox/clustering.clj[`discussion-gems.sandbox.clustering`].
+Dans l'optique d'identifier des thèmes, des algorithmes de clustering basiques (K-means, LDA) et d'étiquetage automatiques de clusters (Mutual Information sur n-grams) sont expérimentés dans link:../../clj/discussion_gems/sandbox/clustering.clj[`discussion-gems.sandbox.clustering`].
 
 Les résultats sont encourageants : on voit se dégager des thématiques comme les Gilets Jaunes, la transition écologique, etc. Il y a encore du travail à faire pour éliminer certains thèmes "parasites" (notamment linguistiques) et pour rendre les résultats "user-friendly".
 
@@ -88,18 +88,18 @@ Les résultats sont encourageants : on voit se dégager des thématiques comme l
 
 Une des pistes les plus prometteuses pour trouver des interventions enrichissantes est de détecter des commentaires qui les décrivent explicitement comme telles (exemple: _"Merci beaucoup pour ces explications détaillées, c'est très intéressant !"_).
 
-xref:../../clj/discussion_gems/experiments/detecting_praise_comments.clj[`discussion-gems.experiments.detecting-praise-comments`] construit un *jeu de données étiqueté et des algorithmes de classification pour détecter ces "acclamations"* (_"praise comments"_).
+link:../../clj/discussion_gems/experiments/detecting_praise_comments.clj[`discussion-gems.experiments.detecting-praise-comments`] construit un *jeu de données étiqueté et des algorithmes de classification pour détecter ces "acclamations"* (_"praise comments"_).
 
 Les résultats accumulés jusqu'ici indiquent qu'il y en a moins de 1%, ce qui complique la mise au point d'algorithmes de classification (problème de _class imbalance_), notamment l'étiquetage de jeux de données.
 
 L'approche choisie est d'utiliser une succession d'algorithmes de classification intermédiaires de faible précision, pour "zoomer" sur une région des données plus dense en cas positifs. Pour l'instant, un seul algorithme intermédiaire est utilisé (une heuristique basée sur des mots clefs), avec un recall d'environ 90% et une précision de 5%, ce qui augmente la densité en positifs d'un facteur 5 environ.
 
-Une *analyse de données bayésienne,* basée sur des simulations MCMC via PyMC3, est utilisée pour superviser la performance de la démarche au fil de l'étiquetage (voir xref:../../discussion_gems_py/praise_comments.py[`praise_comments.py`]).
+Une *analyse de données bayésienne,* basée sur des simulations MCMC via PyMC3, est utilisée pour superviser la performance de la démarche au fil de l'étiquetage (voir link:../../discussion_gems_py/praise_comments.py[`praise_comments.py`]).
 
-._Prédictions de probabilité de Praise Comments (p_R), recall (p_H) et précision (q) de l'heuristique de sélection._
+._Distributions a posteriori de la densité de Praise Comments (p_R), recall (p_H) et précision (q) de l'heuristique de sélection._
 image::praise-comments-heuristic-bayesian-analysis-example.png[]
 
-Parce qu'il est nécessaire d'étiqueter beaucoup de données, et que la quantité d'informations contextuelles nécessaires à l'étiquetage varie fortement (notamment à cause du problème des commentaires potentiellement sarcastiques, par exemple : _"Merci pour cette contribution enrichissante."_), une *UI d'étiquetage sur-mesure* a été développée dans xref:../../lab-ui/src/discussion_gems/lab_ui/welcome.cljs[`discussion-gems.lab-ui.welcome`].
+Parce qu'il est nécessaire d'étiqueter beaucoup de données, et que la quantité d'informations contextuelles nécessaires à l'étiquetage varie fortement (notamment à cause du problème des commentaires potentiellement sarcastiques, par exemple : _"Merci pour cette contribution enrichissante."_), une *UI d'étiquetage sur-mesure* a été développée dans link:../../lab-ui/src/discussion_gems/lab_ui/welcome.cljs[`discussion-gems.lab-ui.welcome`].
 
 ._UI d'étiquetage dans le navigateur, pilotée par des raccorcis clavier._
 image::praise-comments-labelling-ui-demo.gif[]
@@ -108,5 +108,5 @@ Cette UI me permet d'étiqueter entre 1000 et 2000 exemples par jour. À ce jour
 
 *Prochaines étapes:*
 
-. Ajouter un nouvel étage de classification intermédiaire, probablement une forme de SVM, pour encore augmenter la densité d'exemple positifs; l'accompagner par des estimateurs de précision et recall.
+. Ajouter un nouvel étage de classification intermédiaire, probablement une forme de SVM, pour encore augmenter la densité d'exemples positifs; l'accompagner par des estimateurs de précision et recall.
 . Mettre au point l'algorithme de classification final. Il s'appuiera sans doute sur un mélange de features textuels (BoW et/ou word embeddings) et non-textuels (upvotes, métriques hypertexte, etc.). Je penche aujourd'hui pour des algorithmes de classification linéaires combinés par des _Random Forests._
