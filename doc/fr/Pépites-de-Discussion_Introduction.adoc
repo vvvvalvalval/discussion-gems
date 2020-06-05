@@ -20,8 +20,6 @@ Qu'entend-on par _"interventions de qualité"_ ? Ça peut être au choix : des e
 
 Ceci motive la construction d'outils algorithmiques (moteurs de recherche / recommendations) spécialisés pour donner accès à ces contenus rares et précieux. Ce projet s'y adonne, en faisant le pari que les progrès importants en _Natural Language Processing_ de ces dernières années sont à la hauteur des problèmes techniques à résoudre.
 
-L'ambition n'est pas d'émettre automatiquement des jugements de qualité à la hauteur de ce que feraient des humains : l'état de l'art en IA n'en est pas à ce niveau de sens critique. Par contre, on peut espérer fournir des outils de recherche bien plus satisfaisants que ce qu'on peut faire aujourd'hui en fouillant Reddit au hasard.
-
 
 == Proposition de valeur
 
@@ -33,7 +31,7 @@ J'imagine les fonctionnalités suivantes, par ordre croissant d'ambition :
 . _"Quelqu'un a déjà bien répondu"_ : à partir d'un commentaire donné, chercher des réponses existantes de qualités à des commentaires similaires.
 . Robot de recommendations à partir de la fonctionnalité précédente, intervenant spontanément des les discussions pour suggérer des contenus pertinents.
 
-Je m'attends à revoir ces objectifs au fil des difficultés et opportunités rencontrées dans le projet.
+Je m'attends à revoir ces objectifs au fil des difficultés et opportunités rencontrées dans le projet. Notamment, le projet touche à des problèmes encore ouverts en NLP, c'est pourquoi l'ambition n'est pas d'émettre automatiquement des jugements de qualité à la hauteur de ce que feraient des humains. Par contre, on peut espérer fournir des outils de recherche bien plus satisfaisants que ce qu'on peut faire aujourd'hui en fouillant Reddit au hasard.
 
 
 
