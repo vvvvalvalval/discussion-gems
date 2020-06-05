@@ -86,11 +86,11 @@
                                   (when (-> t s-de/key (= COMMENT))
                                     (s-de/value t))))
                               s-and-c-tuples)]
-                   ;; IMPROVEMENT factor out indexing
                    {:dgms_submdb_submission s
-                    :dgms_submdb_comments_list cmts}))))))))
+                    :dgms_submdb_comments_list cmts}))))
+           (spark/filter some?)))))
 
-   :dgms-search-es-docs
+   :dgms-search-0-es-docs
    (mdg/step [:submissions-and-their-comments-maps]
      (fn [submissions-and-their-comments-maps]
        (->> submissions-and-their-comments-maps
@@ -125,6 +125,81 @@
           (get-data-srcs sc)
           [:raw-content-es-docs])
         :raw-content-es-docs))))
+
+(defn index-dgms-search-0!
+  [es-url es-index-name get-data-srcs]
+  (index-rdd-to-es! es-url es-index-name :reddit_name
+    (fn [sc]
+      (->
+        (mdg-run/compute dag_indexing
+          (get-data-srcs sc)
+          [:dgms-search-0-es-docs])
+        :dgms-search-0-es-docs))))
+
+
+(comment
+
+  (def es-url
+    (let [es-instance-domain "ip-172-31-70-82.ec2.internal"]
+      (str "http://" es-instance-domain ":9200")))
+
+  (def esc (es/basic-client es-url))
+
+  *e)
+
+
+(comment
+
+  (def es-index-name "dgms-search-0--0")
+
+  (def done
+    (index-dgms-search-0! es-url es-index-name
+      (fn [sc]
+        (get-data-sources
+          sc))))
+
+  @done
+
+  ;; Initializing the index
+  (:body
+    @(es/request esc
+       {:method :put :url [es-index-name]
+        :body discussion-gems.indexing.elasticsearch-schema/es-mapping_dgms-search-0}))
+
+
+  (es/list-indices-names esc)
+
+  (->> ["dgms-search-0--0"
+        "dgms-search-0--1"
+        "dgms-search-0--2"
+        "dgms-search-0--3"
+        "dgms-search-0--4"]
+    (mapv
+      (fn [idxn]
+        (:body @(es/request esc {:method :delete :url [idxn]})))))
+
+  *e
+
+  (:body
+    @(es/request esc
+       {:method :post :url [es-index-name :_search]
+        :body
+        {:size 0
+         :track_total_hits true}}))
+
+  (:body
+    @(es/request esc
+       {:method :post :url [es-index-name :_search]
+        :body
+        {:size 10
+         :track_total_hits true}}))
+  =>
+  {:took 2,
+   :timed_out false,
+   :_shards {:total 1, :successful 1, :skipped 0, :failed 0},
+   :hits {:total {:value 6101322, :relation "eq"}, :max_score nil, :hits []}}
+
+  *e)
 
 
 (comment

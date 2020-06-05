@@ -1,0 +1,13 @@
+`discussion_gems_py`
+=====================
+
+Python code used in discussion-gems, mostly for using advanced scientific computing / ML / NLP tools.
+
+When executing the code, the working directory should not be `discussion_gems_py/`, but its parent `discussion_gems`.
+
+
+== Code conventions
+
+- `def _dev_SOMETHING():` : a function that is not meant to be called, only to hold some code that will be invoked manually in a Python console.
+
+

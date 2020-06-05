@@ -15,26 +15,29 @@
 
   If a comment expresses nothing more than gratitude, it's not clear that it's a praise comment,
   so it should be labelled with a probability of 0.5."
-  (:require [discussion-gems.utils.misc :as u]
-            [clojure.string :as str]
-            [discussion-gems.parsing.french :as parsing-fr]
-            [discussion-gems.algs.word-embeddings :as wmbed]
+  (:require [clojure.data.fressian :as fressian]
             [clojure.java.io :as io]
-            [discussion-gems.parsing :as parsing]
+            [clojure.string :as str]
             [discussion-gems.algs.linalg :as ulinalg]
-            [discussion-gems.data-sources :as dgds]
-            [sparkling.core :as spark]
-            [discussion-gems.utils.spark :as uspark]
-            [discussion-gems.utils.encoding :as uenc]
-            [clojure.data.fressian :as fressian]
-            [sparkling.destructuring :as s-de]
-            [manifold.deferred :as mfd]
-            [discussion-gems.training.db :as trn-db]
-            [vvvvalvalval.supdate.api :as supd]
-            [next.jdbc :as jdbc]
+            [discussion-gems.algs.word-embeddings :as wmbed]
             [discussion-gems.config.libpython]
+            [discussion-gems.data-sources :as dgds]
+            [discussion-gems.feature-engineering.reddit-markdown :as reddit-md]
+            [discussion-gems.parsing :as parsing]
+            [discussion-gems.parsing.french :as parsing-fr]
+            [discussion-gems.training.db :as trn-db]
+            [discussion-gems.utils.encoding :as uenc]
+            [discussion-gems.utils.misc :as u]
+            [discussion-gems.utils.spark :as uspark]
+            [jsonista.core :as json]
+            [libpython-clj.python :refer [py. py.. py.-] :as py]
             [libpython-clj.require :refer [require-python]]
-            [libpython-clj.python :refer [py. py.. py.-] :as py])
+            [manifold.deferred :as mfd]
+            [mapdag.step :as mdg]
+            [next.jdbc :as jdbc]
+            [sparkling.core :as spark]
+            [sparkling.destructuring :as s-de]
+            [vvvvalvalval.supdate.api :as supd])
   (:import (edu.stanford.nlp.pipeline StanfordCoreNLP CoreSentence CoreDocument)
            (edu.stanford.nlp.ling CoreLabel)
            (java.util.zip GZIPOutputStream GZIPInputStream)
@@ -171,9 +174,9 @@
   [c]
   (or
     (:dgms_body_raw c)
-    (parsing/trim-markdown
-      {::parsing/remove-quotes true
-       ::parsing/remove-code true}
+    (reddit-md/trim-markdown
+      {::reddit-md/remove-quotes true
+       ::reddit-md/remove-code true}
       (:body c))))
 
 
@@ -349,7 +352,7 @@
                 (:content node))
               node))]
     (-> body-md
-      (parsing/md->html-forest)
+      (reddit-md/md->html-forest)
       (as-> nodes
         {:tag :div
          :attrs {:class "dgms-reddit-body"}
@@ -788,6 +791,236 @@
                (-> % ::sample-slice (= ::ordinary))))))
 
 
+;; ------------------------------------------------------------------------------
+;; 2nd heuristic 'h2': a linear split based on BoW and non-word features
+
+
+(def h2-features-map
+  (let [dag_features
+        (merge discussion-gems.feature-engineering.reddit-markdown/dag_reddit-markdown-features
+          {::words
+           (mdg/step [:dgms_body_raw] parsing/split-words-fr)
+
+           ;; NOTE focusing on the beginning and end of comment, (Val, 02 Jun 2020)
+           ;; which is usually most indicative of sentiment
+           ::zoned-words
+           (mdg/step [::words]
+             (fn [words]
+               (u/take-first-and-last 30 30 words)))
+
+           :zoned_tokens
+           (mdg/step [::zoned-words]
+             (fn [zoned-words]
+               (mapv
+                 (fn [w]
+                   (-> w
+                     (str/lower-case)
+                     (parsing-fr/normalize-french-diacritics)))
+                 zoned-words)))
+
+           :n_words
+           (mdg/step [::words] count)
+
+           :is_post
+           (mdg/step [:reddit_name]
+             (fn [reddit-name]
+               (if (some? reddit-name)
+                 (str/starts-with? reddit-name "t3_")
+                 false)))
+           
+           ::non-word-features
+           (mdg/step [:is_post :n_words :dgms_n_quotes :dgms_n_hyperlinks]
+             (fn [is_post n_words dgms_n_quotes dgms_n_hyperlinks]
+               {:is_post is_post
+                :n_words n_words
+                :dgms_n_quotes dgms_n_quotes
+                :dgms_n_hyperlinks dgms_n_hyperlinks}))
+
+           ::features-map
+           (mdg/step
+             [::non-word-features :zoned_tokens]
+             (fn [nw-feats zoned_tokens]
+               (assoc nw-feats :zoned_tokens zoned_tokens)))})
+        compiled-dag
+        (mapdag.runtime.jvm-eval/compile-graph
+          {:mapdag.run/input-keys [::reddit-md/md-txt :reddit_name]
+           :mapdag.run/output-keys [::features-map]}
+          dag_features)]
+    (letfn [(compute-features-map [c]
+              (let [md-txt (or
+                             (:body c)
+                             (:selftext c))]
+                (::features-map
+                  (compiled-dag
+                    {:reddit_name (:name c)
+                     ::reddit-md/md-txt md-txt}))))]
+      (fn h2-features-map [c]
+        {:dgms_comment (compute-features-map c)
+         :dgms_parent (compute-features-map
+                        (-> c :dgms_comment_parent))}))))
+
+(defn h2-featmaps
+  []
+  (let [name->label (trn-db/all-labels dataset-id)
+        unif-sampled-comments (uniformly-sampled-comments)]
+    (->> @d_heuristic-dataset
+      (filter is-comment-of-interest?)
+      (filter heuristic-positive?)
+      (remove
+        (let [to-ignore-ids
+              (into #{}
+                (comp
+                  (map :name)
+                  (filter name->label))
+                unif-sampled-comments)]
+          (fn already-labelled-in-first-dataset? [c]
+            (contains? to-ignore-ids (:name c)))))
+      (map
+        (fn [c]
+          (when-some [lbl (get name->label (:name c))]
+            [c lbl])))
+      (take-while some?)
+      (pmap (fn [[c lbl]]
+              (assoc (h2-features-map c)
+                :dgms_h2_label lbl))))))
+
+(def h2_trainset_path
+  "./resources/h2-train-set-0.json.gz")
+
+(def h2_learned_model_path
+  "./resources/h2-learned-model-0.json.gz")
+
+(def d_h2-m-repr
+  (delay
+    (with-open [rdr (io/reader
+                      (GZIPInputStream.
+                        (io/input-stream h2_learned_model_path)))]
+      (json/read-value rdr))))
+
+(comment
+  ;; Saving the training set to JSON-gz
+  (def train-set
+    (-> (h2-featmaps)
+      ;; NOTE leaving one out of 10 as a test set. (Val, 04 Jun 2020)
+      (->>
+        (partition-all 10)
+        (mapcat #(take 9 %)))
+      vec))
+
+  (with-open [os (GZIPOutputStream.
+                   (io/output-stream h2_trainset_path))]
+    (json/write-value os train-set))
+
+
+
+  (count train-set)
+  => 9486
+
+
+  ;; Learning the h2 classifier
+  (require-python '[discussion_gems_py.praise_comments_h2 :reload])
+
+  (discussion_gems_py.praise_comments_h2/train_and_save_h2_linear_classifier_jsongz
+    h2_trainset_path
+    h2_learned_model_path
+    :cv_k_folds 5)
+
+
+  ;; Reading some self-documentation of the learned model.
+  (-> @d_h2-m-repr
+    (get "INFO"))
+  =>
+  {"kfold_cv_metrics"
+   {"precision" [0.11956521739130435
+                 0.1556122448979592
+                 0.15777262180974477
+                 0.16063348416289594
+                 0.16981132075471697],
+    "recall" [0.7857142857142857
+              0.7261904761904762
+              0.8095238095238095
+              0.8452380952380952
+              0.8571428571428571]}}
+
+  *e)
+
+
+(def h2-selected?
+  (letfn
+    [(apply-coeffs [coeffs-map m]
+       (let [n2
+             (Math/sqrt
+               (reduce-kv
+                 (fn [s w v]
+                   (+ s
+                     (if (contains? coeffs-map w)
+                       (double (* v v))
+                       0.)))
+                 0. m))]
+         (if (zero? n2)
+           0.
+           (/
+             (reduce-kv
+               (fn [s w v]
+                 (+ s
+                   (*
+                     (double
+                       (get coeffs-map w 0.))
+                     v)))
+               0. m)
+             n2))))
+     (BoW-map [x]
+       (->> x
+         :zoned_tokens
+         frequencies))
+     (nw-map [x]
+       {"is_post" (if (:is_post x) 1. 0.)
+        "log2_n_words" (/
+                         (Math/log
+                           (+ 1. (:n_words x)))
+                         (Math/log 2.))
+        "dgms_n_hyperlinks" (double (:dgms_n_hyperlinks x))
+        "dgms_n_quotes" (double (:dgms_n_quotes x))})]
+    (fn h2-selected? [h2_m_repr c]
+      (let [fm (h2-features-map c)
+            {cmt :dgms_comment prt :dgms_parent} fm
+            {intercept "intercept",
+             {cmt-bow "BoW",
+              cmt-nw "non_word"} "dgms_comment"
+             {parent-bow "BoW",
+              parent-nw "non_word"} "dgms_parent"} h2_m_repr]
+        (<= 0.
+          (+ intercept
+            (apply-coeffs cmt-bow
+              (BoW-map cmt))
+            (apply-coeffs parent-bow
+              (BoW-map prt))
+            (apply-coeffs cmt-nw
+              (nw-map cmt))
+            (apply-coeffs parent-nw
+              (nw-map prt))))))))
+
+
+(def d_h2-dataset
+  (delay
+    (into []
+      ;; NOTE starting using h2 from "t1_egwbv7r" (Val, 04 Jun 2020)
+      (filter
+        (let [h2_m_repr @d_h2-m-repr]
+          #(h2-selected? h2_m_repr %)))
+      @d_heuristic-dataset)))
+
+(comment
+
+  (count @d_h2-dataset)
+  => 6370
+
+  *e)
+
+;; ------------------------------------------------------------------------------
+;; Counting positives
+
+
 (defn heuristic-counts
   []
   (let [name->label (trn-db/all-labels dataset-id)
@@ -980,7 +1213,7 @@
           (if (trn-db/already-labeled? labelling-ui-dataset-id (:name c))
             (recur)
             c)))
-    (-> @d_heuristic-dataset
+    (-> @d_h2-dataset
       (->>
         (remove
           (let [labelled-ids (trn-db/all-labeled-ids dataset-id)]
@@ -1000,3 +1233,9 @@
     c-name
     c
     (double lbl)))
+
+(comment
+
+  (next-comment-to-label)
+
+  *e)

@@ -8,9 +8,6 @@
            (org.apache.spark.mllib.linalg.distributed RowMatrix)
            (org.apache.spark.api.java JavaRDD)))
 
-(set! *warn-on-reflection* true)
-(require 'sc.api) ;; FIXME
-
 (defrecord ppmiModel
   [^double log-n-terms
    ^double log-n-docs

@@ -12,7 +12,8 @@
             [clojure.data.fressian :as fressian]
             [discussion-gems.utils.misc :as u]
             [discussion-gems.algs.spark.dimensionality-reduction :as dim-red]
-            [discussion-gems.data-sources :as dgds])
+            [discussion-gems.data-sources :as dgds]
+            [discussion-gems.feature-engineering.reddit-markdown :as reddit-md])
   (:import (org.apache.spark.sql Dataset Row SparkSession RowFactory)
            (org.apache.spark.ml.feature CountVectorizer CountVectorizerModel)
            (org.apache.spark.ml.clustering LDA LDAModel KMeans)
@@ -63,7 +64,7 @@
           (RowFactory/create
             (object-array
               (let [body-md (:body c)
-                    body-raw (parsing/trim-markdown body-md)]
+                    body-raw (reddit-md/trim-markdown body-md)]
                 [(:id c)
                  (:score c)
                  (or body-md "")
@@ -459,9 +460,9 @@
                 (fn [c]
                   (merge
                     (select-keys c [:name :parent_id :link_id])
-                    (when-some [body-raw (parsing/trim-markdown
-                                           {::parsing/remove-quotes true
-                                            ::parsing/remove-code true}
+                    (when-some [body-raw (reddit-md/trim-markdown
+                                           {::reddit-md/remove-quotes true
+                                            ::reddit-md/remove-code true}
                                            (:body c))]
                       {:dgms_body_raw body-raw}))))
               (spark/filter
@@ -483,9 +484,9 @@
                     (into []
                       (remove nil?)
                       [(some-> s :title
-                         (->> (parsing/trim-markdown {::parsing/remove-quotes true ::parsing/remove-code true})))
+                         (->> (reddit-md/trim-markdown {::reddit-md/remove-quotes true ::reddit-md/remove-code true})))
                        (some-> s :selftext
-                         (->> (parsing/trim-markdown {::parsing/remove-quotes true ::parsing/remove-code true})))]))))))
+                         (->> (reddit-md/trim-markdown {::reddit-md/remove-quotes true ::reddit-md/remove-code true})))]))))))
           (uspark/flow-parent-value-to-children
             (fn node? [v]
               (not

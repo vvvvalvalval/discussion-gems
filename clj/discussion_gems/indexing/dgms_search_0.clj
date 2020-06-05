@@ -5,7 +5,8 @@
             [discussion-gems.feature-engineering.submission-db :as submdb]
             [discussion-gems.feature-engineering.reddit-markdown]
             [mapdag.step :as mdg]
-            [mapdag.runtime.jvm-eval]))
+            [mapdag.runtime.jvm-eval]
+            [discussion-gems.feature-engineering.reddit-markdown :as reddit-md]))
 
 
 (def text-content-es-fields
@@ -15,8 +16,7 @@
           {:dgms_text_contents (mdg/step [:dgms_body_raw] identity)})
         compute-fields
         (mapdag.runtime.jvm-eval/compile-graph
-          {:mapdag.run/input-keys #{::parsing/md-txt}
-           :mapdag.run/output-keys [:dgms_text_contents
+          {:mapdag.run/output-keys [:dgms_text_contents
 
                                     :dgms_n_sentences
                                     :dgms_n_words
@@ -24,8 +24,11 @@
                                     :dgms_n_formatting]}
           dag)]
     (fn text-content-es-fields
-      [md-txt]
-      (compute-fields {::parsing/md-txt md-txt}))))
+      [md-txt cache-map]
+      (compute-fields
+        (merge
+          {::reddit-md/md-txt md-txt}
+          (select-keys cache-map [:dgms_syntax_stats_fr]))))))
 
 
 (defn common-base-fields
@@ -54,7 +57,8 @@
           (when-some [slftxt (parsing/non-empty-md-txt
                                (:selftext reddit-subm))]
             (str "\n\n"
-              slftxt)))))))
+              slftxt)))
+        reddit-subm))))
 
 
 (defn base-es-doc-for-comment
@@ -64,8 +68,9 @@
     {:reddit_type "reddit_type_comment"
      :parent_reddit_name (:parent_id reddit-cmt)}
     (text-content-es-fields
-      (parsing/non-empty-md-txt
-        (:body reddit-cmt)))))
+      (reddit-md/non-empty-md-txt
+        (:body reddit-cmt))
+      reddit-cmt)))
 
 
 (defn comment-fields-from-relatives

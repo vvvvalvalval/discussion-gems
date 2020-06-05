@@ -3,7 +3,7 @@
 
 (def es-mapping_dgms-raw-content
   "A (cumbersome) index, that won't be updated frequently,
-  acting as a KV-store for retrieving the original documents."
+  acting as a KV-store for retrieving the original Reddit documents."
   {:mappings
    {:properties
     {:reddit_name {:type :keyword}
@@ -21,12 +21,15 @@
      :subm_reddit_name {:type :keyword}
 
      ;; NOTE Norms are ignored here, because we postulate that concise documents won't be more relevant. (Val, 30 May 2020)
+     ;; https://www.elastic.co/guide/en/elasticsearch/reference/current/norms.html
+     ;; NOTE Analysis is performed in French:
+     ;; https://www.elastic.co/guide/en/elasticsearch/reference/current/analysis-lang-analyzer.html#french-analyzer
      :subm_title {:type :text, :norms false
-                  :analyzer :french_analyzer}
+                  :analyzer :french}
      :dgms_text_contents {:type :text, :norms false
-                          :analyzer :french_analyzer}
+                          :analyzer :french}
      :dgms_parent_text_contents {:type :text, :norms false
-                                 :analyzer :french_analyzer}
+                                 :analyzer :french}
 
      :reddit_created {:type :date}
 
@@ -36,6 +39,7 @@
      :reddit_n_downs {:type :integer}
      :reddit_score {:type :integer}
 
+     ;; TODO number of quotes
      ;; TODO number of figures (and dates?)
      :dgms_n_sentences {:type :integer}
      :dgms_n_words {:type :integer}

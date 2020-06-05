@@ -27,24 +27,7 @@
     (fn enrich-comment [c]
       (merge c
         (compute-derived-keys
-          {::parsing/md-txt (:body c)})
-        #_(when-some [md-html-forest (parsing/md->html-forest (:body c))]
-            (let [body-raw (parsing/raw-text-contents
-                             {::parsing/remove-code true
-                              ::parsing/remove-quotes true}
-                             md-html-forest)]
-              {:dgms_body_raw body-raw
-               #_#_:dgms_body_vector
-                   (py/with-gil
-                     (float-array
-                       (let [parsed (@fr_pipeline body-raw)]
-                         (py.- parsed vector))))
-               :dgms_syntax_stats_fr
-               (parsing/syntax-stats-fr body-raw)
-               :dgms_hyperlinks
-               (parsing/hyperlinks md-html-forest)
-               :dgms_n_formatting
-               (parsing/formatting-count md-html-forest)}))))))
+          {:discussion-gems.feature-engineering.reddit-markdown/md-txt (:body c)})))))
 
 (comment
 

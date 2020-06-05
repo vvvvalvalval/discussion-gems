@@ -69,7 +69,7 @@ En plus du langage naturel, on compte beaucoup sur des aspects hypertextes (lien
 
 === Indexation dans ElasticSearch
 
-link:../../clj/discussion_gems/indexing/spark_to_elasticsearch.clj[`discussion-gems.indexing.spark-to-elasticsearch`] contient des pipelines d'indexaction dans ElasticSearch. Les schémas des index ElasticSearch se trouvent dans link:../../clj//Users/val/projects/discussion-gems/discussion-gems/clj/discussion_gems/indexing/elasticsearch_schema.clj[`discussion-gems.indexing.elasticsearch-schema`].
+link:../../clj/discussion_gems/indexing/spark_to_elasticsearch.clj[`discussion-gems.indexing.spark-to-elasticsearch`] contient des pipelines d'indexation dans ElasticSearch. Les schémas des index ElasticSearch se trouvent dans link:../../clj//Users/val/projects/discussion-gems/discussion-gems/clj/discussion_gems/indexing/elasticsearch_schema.clj[`discussion-gems.indexing.elasticsearch-schema`].
 
 Des premières requêtes manuelles montrent que les résultats pertinents sont encore fortement dilués dans des commentaires de peu enrichissants, même en s'appuyant sur des filtres comme la longueur des commentaires, le nombre de liens, etc. Cela confirme la nécessité de features sémantiques moins superficiels.
 
@@ -90,9 +90,20 @@ Une des pistes les plus prometteuses pour trouver des interventions enrichissant
 
 link:../../clj/discussion_gems/experiments/detecting_praise_comments.clj[`discussion-gems.experiments.detecting-praise-comments`] construit un *jeu de données étiqueté et des algorithmes de classification pour détecter ces "acclamations"* (_"praise comments"_).
 
-Les résultats accumulés jusqu'ici indiquent qu'il y en a moins de 1%, ce qui complique la mise au point d'algorithmes de classification (problème de _class imbalance_), notamment l'étiquetage de jeux de données.
+Les résultats accumulés jusqu'ici indiquent qu'il y en a moins de 1%, ce qui complique la mise au point d'algorithmes de classification (problème de _class imbalance_), notamment l'étiquetage de jeux de données : il est exclu d'étiqueter des données échantillonnées uniformément jusqu'à avoir assez de données pour entraîner un algorithme de manière satisfaisante (l'objectif final étant : _high precision, moderate recall_ footnote:[Pourquoi ces objectifs de performance ? La haute _precision_ est importante pour ne pas décevoir les utilisateurs du service par du mauvais contenu. Je considère que le _recall_ est moins critique, parce qu'utiliser Reddit est déjà une approche à faible _recall_ pour s'informer sur un sujet : on ne s'attend pas à ce que tout le contenu intéressant sur un sujet donné soit contenu dans Reddit, donc on peut bien accepter aussi de rater certaines des perles de `r/france`, ce qui est déjà la situation dans laquelle on se trouve avant d'utiliser Pépites de Discussion.]), ce serait trop de travail.
 
-L'approche choisie est d'utiliser une succession d'algorithmes de classification intermédiaires de faible précision, pour "zoomer" sur une région des données plus dense en cas positifs. Pour l'instant, un seul algorithme intermédiaire est utilisé (une heuristique basée sur des mots clefs), avec un recall d'environ 90% et une précision de 5%, ce qui augmente la densité en positifs d'un facteur 5 environ.
+On se retrouve donc dans la situation de devoir développer simultanément l'algorithme de classification et son jeu d'entraînement. Il existe déjà pour cela quelques méthodes classiques :
+
+. _Active-Learning_
+. _Relevance Feedback_
+. _Semi-Supervised Learning_
+
+Le problème que je vois dans ces approches, c'est qu'elles demandent en général de s'être déjà arrêté sur un algorithme spécifique, ce que je préfère éviter à ce stade.
+
+Par conséquent, l'approche choisie est d'utiliser une succession d'algorithmes de classification intermédiaires de faible précision, pour "zoomer" sur une région des données plus dense en cas positifs, et pouvoir étiqueter assez de positifs pour entraîner un classificateur final de haute précision : l'algorithme global consistera en l'enchaînement de ces classificateurs. À ce stade, il y a 2 classificateurs intermédiaires :
+
+. une heuristique de sélection basée sur des mots-clés choisis manuellement, améliorant la densité de positifs de 1% à 5%, avec un _recall_ d'environ 90%
+. un link:../../discussion_gems_py/praise_comments_h2.py[classificateur linéaire] (SVM) basé sur des BoW et quelques attributs structurels, améliorant la précision de 5% à environ 15%, avec un _recall_ d'environ 80%.
 
 Une *analyse de données bayésienne,* basée sur des simulations MCMC via PyMC3, est utilisée pour superviser la performance de la démarche au fil de l'étiquetage (voir link:../../discussion_gems_py/praise_comments.py[`praise_comments.py`]).
 
@@ -108,5 +119,5 @@ Cette UI me permet d'étiqueter entre 1000 et 2000 exemples par jour. À ce jour
 
 *Prochaines étapes:*
 
-. Ajouter un nouvel étage de classification intermédiaire, probablement une forme de SVM, pour encore augmenter la densité d'exemples positifs; l'accompagner par des estimateurs de précision et recall.
+. Poursuivre l'étiquetage des données sélectionnées par la 2ème heuristique
 . Mettre au point l'algorithme de classification final. Il s'appuiera sans doute sur un mélange de features textuels (BoW et/ou word embeddings) et non-textuels (upvotes, métriques hypertexte, etc.). Je penche aujourd'hui pour des algorithmes de classification linéaires combinés par des _Random Forests._

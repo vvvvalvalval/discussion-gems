@@ -47,8 +47,12 @@
 
 (defn comments-md-sample-rdd
   [sc]
-  (uspark/from-hadoop-fressian-sequence-file sc seqfile-comments-md))
+  (->>
+    (uspark/from-hadoop-fressian-sequence-file sc seqfile-comments-md)
+    (spark/map #(parsing/backfill-reddit-name "t1_" %))))
 
 (defn subm-md-sample-rdd
   [sc]
-  (uspark/from-hadoop-fressian-sequence-file sc seqfile-subm-md))
+  (->>
+    (uspark/from-hadoop-fressian-sequence-file sc seqfile-subm-md)
+    (spark/map #(parsing/backfill-reddit-name "t3_" %))))
