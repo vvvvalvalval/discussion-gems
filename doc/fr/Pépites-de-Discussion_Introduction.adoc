@@ -23,15 +23,18 @@ Ceci motive la construction d'outils algorithmiques (moteurs de recherche / reco
 L'ambition n'est pas d'émettre automatiquement des jugements de qualité à la hauteur de ce que feraient des humains : l'état de l'art en IA n'en est pas à ce niveau de sens critique. Par contre, on peut espérer fournir des outils de recherche bien plus satisfaisants que ce qu'on peut faire aujourd'hui en fouillant Reddit au hasard.
 
 
-== Objectifs
+== Proposition de valeur
 
-Ce projet se heurte à plusieurs problèmes de recherche encore ouverts en NLP, et je ne sais pas encore dire à quoi il aboutira. J'imagine les propositions de valeur suivantes, par ordre croissant d'ambition :
+J'imagine les fonctionnalités suivantes, par ordre croissant d'ambition :
 
 . Corpus de commentaires "probablement intéressants" : un sous-ensemble du contenu du forum avec une haute densité de commentaires enrichissants.
 . Moteur de recherche (plus ou moins structurée) sur un tel corpus.
 . _"Quelqu'un l'a mieux dit" :_ écrire un brouillon de commentaire, et se faire suggérer des commentaires existants potentiellement mieux écrits au message similaire.
 . _"Quelqu'un a déjà bien répondu"_ : à partir d'un commentaire donné, chercher des réponses existantes de qualités à des commentaires similaires.
 . Robot de recommendations à partir de la fonctionnalité précédente, intervenant spontanément des les discussions pour suggérer des contenus pertinents.
+
+Je m'attends à revoir ces objectifs au fil des difficultés et opportunités rencontrées dans le projet.
+
 
 
 == Survol technologique
@@ -44,7 +47,7 @@ Les *problématiques techniques* principales à résoudre sur ce type de projet 
 - La mise en oeuvre d'**algorithmes scientifiques** de _Natural Language Processing_ / _Information Retrieval_ pour en extraire du sens. _(Python, ElasticSearch)_
 - Le développement d'**interfaces Web** pour y donner accès. _(Clojure, React.js)_
 
-Dans cette optique, le choix des technologies citées plus haut s'explique dans cet ordre :
+Dans cette optique, le choix des technologies citées plus haut a été pensé ainsi :
 
 . Python donne accès à un riche écosystème de Machine Learning et de NLP (spaCy, Scikit-Learn, PyTorch, etc.)footnote:[Ceci dit, certaines librairies de Machine Learning de la JVM, comme Spark MlLib ou Stanford CoreNLP, sont utilisées lorsque c'est avantageux de le faire - typiquement parce qu'elles permettent une meilleure vitesse d'exécution pour des algorithmes de ML basiques. Python est plutôt réservé aux algorithmes pointus.]
 . ElasticSearch facilite la construction de moteur de recherche.
